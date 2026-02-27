@@ -238,7 +238,7 @@ export function AIChat() {
   }
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-5rem)] max-w-4xl flex-col px-4 py-6 lg:px-8">
+    <div className="flex h-[calc(100vh-12rem)] flex-col px-4 py-6 lg:px-8">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">

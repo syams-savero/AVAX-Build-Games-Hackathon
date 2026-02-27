@@ -26,13 +26,8 @@ import {
   Check,
 } from "lucide-react";
 
-const employerLinks = [
-  { href: "/chat", label: "Hire AI Agent" },
-];
-
-const freelancerLinks = [
-  { href: "/marketplace", label: "Find Work" },
-];
+const employerLinks: { href: string; label: string }[] = [];
+const freelancerLinks: { href: string; label: string }[] = [];
 
 const commonLinks = [
   { href: "/dashboard", label: "Dashboard" },
@@ -67,8 +62,8 @@ export function Navbar() {
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 lg:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group">
-          <span className="text-xl font-black tracking-tight text-slate-900 hover:text-emerald-600 transition-colors">
-            ChainLancer
+          <span className="text-xl font-black tracking-tight text-slate-900 transition-colors group-hover:text-emerald-600">
+            Chain<span className="text-emerald-600 transition-colors group-hover:text-slate-900">Lancer</span>
           </span>
         </Link>
 
@@ -91,21 +86,6 @@ export function Navbar() {
           ))}
           {/* Freelancer Links */}
           {freelancerLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`rounded-xl px-5 py-2.5 text-sm font-bold tracking-tight transition-all ${pathname === link.href
-                ? "bg-emerald-50 text-emerald-700 shadow-sm"
-                : "text-slate-500 hover:text-emerald-600 hover:bg-slate-50"
-                }`}
-            >
-              <div className="flex items-center gap-2">
-                {link.label}
-              </div>
-            </Link>
-          ))}
-          {/* Common Links */}
-          {commonLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -154,6 +134,13 @@ export function Navbar() {
                     {balance} <span className="text-xs font-bold text-emerald-600">KITE</span>
                   </p>
                 </div>
+                <DropdownMenuSeparator className="my-1 bg-slate-50" />
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard" className="gap-3 h-10 rounded-lg cursor-pointer font-bold text-slate-600 focus:bg-emerald-50 focus:text-emerald-700">
+                    <LogOut className="h-4 w-4 rotate-180" />
+                    Dashboard
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator className="my-1 bg-slate-50" />
                 <DropdownMenuItem onClick={handleCopy} className="gap-3 h-10 rounded-lg cursor-pointer font-bold text-slate-600 focus:bg-emerald-50 focus:text-emerald-700">
                   {copied ? (

@@ -1,113 +1,166 @@
-"use client";
+'use client';
 
+import { useState } from "react";
+import { Sidebar } from "@/components/sidebar";
+import {
+    Search,
+    SlidersHorizontal,
+    MapPin,
+    Clock,
+    DollarSign,
+    ShieldCheck,
+    Zap,
+    Star,
+    ChevronRight
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Globe, ShieldCheck, Zap, ArrowRight, User } from "lucide-react";
-import Link from "next/link";
+import { motion } from "framer-motion";
 
-const mockJobs = [
+const JOBS = [
     {
-        id: "J1",
-        title: "Yield Optimizer V2 Lead",
-        budget: "50,000",
-        client: "0x82...1f2",
-        tags: ["Solidity", "Avalanche", "Defi"],
-        audit: "PASSED",
+        id: 1,
+        title: "Senior Web3 Developer for DeFi Vault Integration",
+        description: "Looking for an expert to help us integrate cross-chain yield vaults into our platform. Must be familiar with Avalanche primitives and AI-audited smart contracts.",
+        budget: "$8,000 - $12,000",
+        experience: "Expert",
+        time: "2 hours ago",
+        difficulty: "High",
+        aiVetted: true,
+        skills: ["Solidity", "Avalanche", "Next.js", "AI Audit"],
+        tags: ["Pinned", "High Budget"]
     },
     {
-        id: "J2",
-        title: "NFT Marketplace Audit",
-        budget: "12,000",
-        client: "0x44...9a1",
-        tags: ["Security", "ERC-721"],
-        audit: "PENDING",
+        id: 2,
+        title: "Technical Content Writer - Blockchain & AI",
+        description: "Write deep-dive articles about Autonomous AI Agents on Kite AI. Need someone who understands agentic workflows and on-chain reputation systems.",
+        budget: "$1,500",
+        experience: "Intermediate",
+        time: "5 hours ago",
+        difficulty: "Low",
+        aiVetted: false,
+        skills: ["Writing", "AI Agents", "Tokenomics"],
+        tags: ["Fast Payment"]
     },
     {
-        id: "J3",
-        title: "Bridge Protocol Support",
-        budget: "85,000",
-        client: "0x11...ec4",
-        tags: ["Cross-Chain", "DevOps"],
-        audit: "PASSED",
+        id: 3,
+        title: "UI/UX Designer for Freelance Marketplace",
+        description: "Design a clean, professional dashboard for our Web3 talent hub. Focus on 'Calm Tech' and emerald-themed minimal aesthetics.",
+        budget: "$3,500 - $5,000",
+        experience: "Intermediate",
+        time: "1 day ago",
+        difficulty: "Medium",
+        aiVetted: true,
+        skills: ["Figma", "UI Design", "Tailwind CSS"],
+        tags: ["Design"]
     }
 ];
 
 export default function MarketplacePage() {
-    return (
-        <div className="min-h-screen bg-white">
-            <main className="mx-auto max-w-7xl px-4 py-20 lg:px-8">
-                <div className="mb-12">
-                    <h1 className="text-4xl font-black text-slate-900 tracking-tight">On-Chain Job Board</h1>
-                    <p className="mt-2 text-slate-500 font-medium">Find specialized Web3 roles managed and secured by ChainLancer AI Agents.</p>
-                </div>
+    const [searchTerm, setSearchTerm] = useState("");
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div className="lg:col-span-2 space-y-4">
-                        {mockJobs.map((job) => (
-                            <Card key={job.id} className="p-6 border border-slate-200 hover:border-emerald-500/50 transition-all hover:shadow-xl hover:shadow-emerald-500/5 group">
-                                <div className="flex justify-between items-start mb-4">
-                                    <div>
-                                        <h3 className="text-xl font-bold text-slate-900 group-hover:text-emerald-600 transition-colors uppercase tracking-tight">{job.title}</h3>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <User className="h-3 w-3 text-slate-400" />
-                                            <span className="text-xs font-bold text-slate-500">{job.client}</span>
+    return (
+        <div className="min-h-screen bg-slate-50 flex">
+            <Sidebar />
+
+            <main className="flex-1 ml-64 p-8 pt-24 text-slate-900">
+                <div className="max-w-5xl mx-auto">
+                    {/* Marketplace Header */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
+                        <div>
+                            <h1 className="text-4xl font-black tracking-tight text-slate-900">Marketplace</h1>
+                            <p className="text-slate-500 font-medium mt-1">Discover high-quality Web3 projects vetted by AI.</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <Button variant="outline" className="rounded-xl border-slate-200 font-bold h-12 gap-2">
+                                <SlidersHorizontal className="w-4 h-4" /> Filters
+                            </Button>
+                            <Button className="bg-emerald-600 hover:bg-emerald-700 rounded-xl font-bold h-12 px-8 shadow-lg shadow-emerald-500/20 transition-all active:scale-95">
+                                My Feed
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Search Area */}
+                    <div className="relative mb-12">
+                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                        <input
+                            type="text"
+                            placeholder="Search for jobs (e.g. Solidity Developer, AI Auditor...)"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full bg-white border-2 border-slate-100 rounded-2xl py-5 pl-14 pr-6 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/5 transition-all shadow-sm"
+                        />
+                    </div>
+
+                    {/* Job List */}
+                    <div className="space-y-6">
+                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Recommended Jobs</h3>
+
+                        {JOBS.map((job) => (
+                            <motion.div
+                                key={job.id}
+                                whileHover={{ y: -2 }}
+                                className="group relative bg-white border border-slate-200 p-8 rounded-3xl transition-all hover:border-emerald-500/30 hover:shadow-2xl hover:shadow-emerald-500/10 cursor-pointer"
+                            >
+                                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+                                    <div className="flex-1 space-y-4">
+                                        <div className="flex flex-wrap gap-2">
+                                            {job.aiVetted && (
+                                                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-100 font-bold tracking-tight rounded-lg flex items-center gap-1">
+                                                    <ShieldCheck className="w-3 h-3" /> AI Vetted
+                                                </Badge>
+                                            )}
+                                            {job.tags.map(tag => (
+                                                <Badge key={tag} variant="secondary" className="bg-slate-50 text-slate-500 border-slate-100 font-bold rounded-lg px-2">
+                                                    {tag}
+                                                </Badge>
+                                            ))}
+                                        </div>
+
+                                        <h2 className="text-2xl font-black text-slate-900 group-hover:text-emerald-600 transition-colors leading-tight">
+                                            {job.title}
+                                        </h2>
+
+                                        <p className="text-slate-500 text-sm leading-relaxed max-w-3xl line-clamp-2">
+                                            {job.description}
+                                        </p>
+
+                                        <div className="flex flex-wrap items-center gap-6 text-xs font-bold text-slate-400 tracking-tight">
+                                            <div className="flex items-center gap-1.5"><DollarSign className="w-4 h-4 text-emerald-600" /> {job.budget}</div>
+                                            <div className="flex items-center gap-1.5"><Zap className="w-4 h-4 text-amber-500" /> {job.difficulty} Priority</div>
+                                            <div className="flex items-center gap-1.5"><Clock className="w-4 h-4" /> {job.time}</div>
+                                        </div>
+
+                                        <div className="flex flex-wrap gap-2 pt-2">
+                                            {job.skills.map(skill => (
+                                                <span key={skill} className="px-3 py-1 bg-slate-50 text-slate-600 rounded-lg text-xs font-bold border border-slate-100">
+                                                    {skill}
+                                                </span>
+                                            ))}
                                         </div>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-lg font-black text-emerald-600">${job.budget}</p>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">USDC Budget</p>
+
+                                    <div className="lg:w-48 flex flex-col items-center justify-center p-6 bg-slate-50 rounded-2xl border border-slate-100 group-hover:bg-emerald-50 group-hover:border-emerald-100 transition-colors">
+                                        <div className="flex items-center gap-1 text-emerald-600 mb-2">
+                                            <Star className="w-4 h-4 fill-current" />
+                                            <span className="text-lg font-black">4.9</span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center">Employer Rating</p>
+                                        <button className="mt-4 text-emerald-600 text-sm font-black flex items-center gap-1 group/btn">
+                                            Apply Now <ChevronRight className="w-4 h-4 transition-transform group-hover/btn:translate-x-1" />
+                                        </button>
                                     </div>
                                 </div>
-
-                                <div className="flex flex-wrap gap-2 mb-6">
-                                    {job.tags.map(tag => (
-                                        <Badge key={tag} variant="secondary" className="bg-slate-100 text-slate-600 border-none font-bold text-[10px]">
-                                            {tag}
-                                        </Badge>
-                                    ))}
-                                </div>
-
-                                <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-                                    <div className="flex items-center gap-2">
-                                        <ShieldCheck className={`h-4 w-4 ${job.audit === 'PASSED' ? 'text-emerald-500' : 'text-amber-500'}`} />
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">AI Audit: {job.audit}</span>
-                                    </div>
-                                    <Button className="rounded-xl bg-slate-900 hover:bg-black text-white px-6 font-bold text-xs h-9">
-                                        Apply for Gig
-                                    </Button>
-                                </div>
-                            </Card>
+                            </motion.div>
                         ))}
                     </div>
 
-                    <div className="space-y-6">
-                        <Card className="p-6 bg-emerald-600 text-white border-none shadow-2xl shadow-emerald-500/20">
-                            <h2 className="text-xl font-black mb-2">Want to Hire?</h2>
-                            <p className="text-sm font-medium opacity-90 leading-relaxed mb-6">
-                                Let our AI Agent assemble a team for you automatically. Deploy your first escrow in seconds.
-                            </p>
-                            <Link href="/chat">
-                                <Button className="w-full bg-white text-emerald-700 hover:bg-slate-50 font-black rounded-xl h-12 shadow-lg">
-                                    Start Hiring Now
-                                </Button>
-                            </Link>
-                        </Card>
-
-                        <Card className="p-6 border border-slate-200">
-                            <div className="flex items-center gap-3 mb-4">
-                                <Zap className="h-5 w-5 text-emerald-600" />
-                                <h3 className="font-bold text-slate-900">Partner Networks</h3>
-                            </div>
-                            <div className="space-y-3">
-                                {["Avalanche L1", "Kite AI Core", "Tether WDK"].map(net => (
-                                    <div key={net} className="flex items-center justify-between text-xs font-bold text-slate-500 p-2 rounded-lg bg-slate-50">
-                                        {net}
-                                        <ArrowRight className="h-3 w-3" />
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
+                    <div className="mt-12 text-center">
+                        <Button variant="ghost" className="text-slate-400 font-bold hover:text-emerald-600">
+                            Load more opportunities
+                        </Button>
                     </div>
                 </div>
             </main>

@@ -313,7 +313,7 @@ export function EscrowDashboard() {
   }
 
   return (
-    <div className="space-y-8 p-1">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-10">
       {/* Header with Role Tabs */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-4">
@@ -340,7 +340,7 @@ export function EscrowDashboard() {
           </div>
         </div>
 
-        <div className="hidden md:flex flex-col items-end gap-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl">
+        <div className="hidden md:flex flex-col items-end gap-1 px-4 py-3 bg-beige border border-slate-200 rounded-2xl">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Identity</span>
           <div className="flex items-center gap-3">
             <span className="text-sm font-black text-slate-900">{shortAddress}</span>
