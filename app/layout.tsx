@@ -42,7 +42,7 @@ export default function RootLayout({
         <WalletProvider>
           <div className="flex min-h-screen flex-col">
             <Navbar />
-            <div className="flex-1">{children}</div>
+            <main className="flex-1">{children}</main>
             <Footer />
           </div>
         </WalletProvider>

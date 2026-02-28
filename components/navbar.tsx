@@ -24,6 +24,8 @@ import {
   Copy,
   ArrowRight,
   Check,
+  Bell,
+  MessageSquare,
 } from "lucide-react";
 
 const employerLinks: { href: string; label: string }[] = [];
@@ -61,119 +63,59 @@ export function Navbar() {
     <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-xl">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 lg:px-8">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-3 group">
+        <Link href="/" className="flex items-center group">
           <span className="text-xl font-black tracking-tight text-slate-900 transition-colors group-hover:text-emerald-600">
-            Chain<span className="text-emerald-600 transition-colors group-hover:text-slate-900">Lancer</span>
+            Chain
+          </span>
+          <span className="text-xl font-black tracking-tight text-emerald-600 transition-colors group-hover:text-slate-900">
+            Lancer
           </span>
         </Link>
 
-        {/* Desktop Nav */}
-        <nav className="hidden items-center gap-2 md:flex">
-          {/* Employer Links */}
-          {employerLinks.map((link) => (
+        {/* Center Nav */}
+        <nav className="hidden items-center gap-8 lg:flex">
+          {[
+            { href: "/marketplace", label: "Browse Services" },
+            { href: "/jobs", label: "Find Jobs" },
+            { href: "/freelancers", label: "Hire Freelancers" },
+          ].map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className={`rounded-xl px-5 py-2.5 text-sm font-bold tracking-tight transition-all ${pathname === link.href
-                ? "bg-emerald-50 text-emerald-700 shadow-sm"
-                : "text-slate-500 hover:text-emerald-600 hover:bg-slate-50"
+              className={`text-sm font-bold tracking-tight transition-all ${pathname === link.href
+                ? "text-emerald-600"
+                : "text-slate-600 hover:text-emerald-600"
                 }`}
             >
-              <div className="flex items-center gap-2">
-                {link.label}
-              </div>
-            </Link>
-          ))}
-          {/* Freelancer Links */}
-          {freelancerLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`rounded-xl px-5 py-2.5 text-sm font-bold tracking-tight transition-all ${pathname === link.href
-                ? "bg-emerald-50 text-emerald-700 shadow-sm"
-                : "text-slate-500 hover:text-emerald-600 hover:bg-slate-50"
-                }`}
-            >
-              <div className="flex items-center gap-2">
-                {link.label}
-              </div>
+              {link.label}
             </Link>
           ))}
         </nav>
 
-        {/* Wallet */}
-        <div className="hidden items-center gap-3 md:flex">
-          {isConnected && !isCorrectChain && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={switchToKiteTestnet}
-              className="gap-1.5 h-10 rounded-xl px-4 font-bold"
-            >
-              <AlertTriangle className="h-4 w-4" />
-              Switch Network
-            </Button>
-          )}
+        {/* Right Section */}
+        <div className="flex items-center gap-6">
+          <div className="hidden items-center gap-6 md:flex">
+            <button className="text-slate-500 hover:text-slate-900 transition-colors">
+              <Bell className="h-5 w-5" />
+            </button>
+            <button className="text-slate-500 hover:text-slate-900 transition-colors">
+              <MessageSquare className="h-5 w-5" />
+            </button>
+            <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 overflow-hidden cursor-pointer hover:border-emerald-500 transition-all">
+              {/* Placeholder for Avatar */}
+            </div>
+          </div>
 
-          {isConnected ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="gap-3 border-emerald-100 bg-emerald-50/50 hover:bg-emerald-50 text-slate-900 h-11 px-5 rounded-xl font-bold"
-                >
-                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  {shortAddress}
-                  <ChevronDown className="h-4 w-4 text-emerald-600" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 p-2 rounded-2xl border-slate-100 bg-white shadow-2xl">
-                <div className="px-3 py-3 bg-slate-50/50 rounded-xl mb-1">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Balance</p>
-                  <p className="text-lg font-black text-slate-900 mt-0.5">
-                    {balance} <span className="text-xs font-bold text-emerald-600">KITE</span>
-                  </p>
-                </div>
-                <DropdownMenuSeparator className="my-1 bg-slate-50" />
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard" className="gap-3 h-10 rounded-lg cursor-pointer font-bold text-slate-600 focus:bg-emerald-50 focus:text-emerald-700">
-                    <LogOut className="h-4 w-4 rotate-180" />
-                    Dashboard
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="my-1 bg-slate-50" />
-                <DropdownMenuItem onClick={handleCopy} className="gap-3 h-10 rounded-lg cursor-pointer font-bold text-slate-600 focus:bg-emerald-50 focus:text-emerald-700">
-                  {copied ? (
-                    <Check className="h-4 w-4 text-emerald-600" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                  {copied ? "Copied!" : "Copy Address"}
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a
-                    href={`${KITE_TESTNET.blockExplorerUrl}address/${address}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="gap-3 h-10 rounded-lg cursor-pointer font-bold text-slate-600 focus:bg-emerald-50 focus:text-emerald-700"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    Explorer
-                  </a>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="my-1 bg-slate-50" />
-                <DropdownMenuItem onClick={disconnect} className="gap-3 h-10 rounded-lg cursor-pointer font-bold text-red-600 focus:bg-red-50 focus:text-red-700">
-                  <LogOut className="h-4 w-4" />
-                  Disconnect
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Button onClick={connect} disabled={isConnecting} className="h-11 px-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-500/20">
-              <Wallet className="h-4 w-4 mr-2" />
-              {isConnecting ? "Connecting..." : "Connect Wallet"}
+          <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
+
+          <div className="flex items-center gap-4">
+            <button className="text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors">
+              Sign In
+            </button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white h-11 px-6 rounded-xl font-black tracking-tight transition-all active:scale-95">
+              Join Now
             </Button>
-          )}
+          </div>
         </div>
 
         {/* Mobile Toggle */}
