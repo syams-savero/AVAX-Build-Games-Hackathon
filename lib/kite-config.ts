@@ -67,3 +67,20 @@ export function formatKite(amount: string): string {
   if (isNaN(num)) return "0 KITE";
   return `${num.toLocaleString()} KITE`;
 }
+
+export const AVALANCHE_FUJI = {
+  chainId: 43113,
+  chainIdHex: "0xa869",
+  chainName: "Avalanche Fuji Testnet",
+  rpcUrl: "https://api.avax-test.network/ext/bc/C/rpc",
+  blockExplorerUrl: "https://testnet.snowtrace.io",
+  nativeCurrency: {
+    name: "AVAX",
+    symbol: "AVAX",
+    decimals: 18,
+  },
+} as const
+
+// Ganti ini untuk switch network
+export const ACTIVE_NETWORK = AVALANCHE_FUJI
+// export const ACTIVE_NETWORK = KITE_TESTNET 
