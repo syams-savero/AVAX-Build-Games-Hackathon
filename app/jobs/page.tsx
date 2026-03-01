@@ -1,70 +1,62 @@
 'use client';
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
     Search,
     SlidersHorizontal,
     DollarSign,
     ShieldCheck,
-    Zap,
-    Clock,
-    ChevronDown,
     Briefcase,
     TrendingUp,
-    MapPin,
+    Clock,
     Users
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { motion } from "framer-motion";
-
-const JOBS = [
-    {
-        id: 1,
-        title: "Senior Web3 Developer for DeFi Vault Integration",
-        description: "Looking for an expert to help us integrate cross-chain yield vaults into our platform. Must be familiar with Avalanche primitives and AI-audited smart contracts.",
-        company: "DeFi Protocol X",
-        budget: "$8,000 - $12,000",
-        type: "Fixed Price",
-        time: "2 hours ago",
-        difficulty: "Expert",
-        aiVetted: true,
-        skills: ["Solidity", "Avalanche", "Next.js", "AI Audit"],
-        proposals: "12-15"
-    },
-    {
-        id: 2,
-        title: "Technical Content Writer - Blockchain & AI",
-        description: "Write deep-dive articles about Autonomous AI Agents on Kite AI. Need someone who understands agentic workflows and on-chain reputation systems.",
-        company: "AI Labs",
-        budget: "$1,500",
-        type: "Fixed Price",
-        time: "5 hours ago",
-        difficulty: "Intermediate",
-        aiVetted: false,
-        skills: ["Writing", "AI Agents", "Tokenomics"],
-        proposals: "5-10"
-    },
-    {
-        id: 3,
-        title: "UI/UX Designer for Freelance Marketplace",
-        description: "Design a clean, professional dashboard for our Web3 talent hub. Focus on 'Calm Tech' and emerald-themed minimal aesthetics.",
-        company: "ChainLancer Core",
-        budget: "$3,500 - $5,000",
-        type: "Fixed Price",
-        time: "1 day ago",
-        difficulty: "Intermediate",
-        aiVetted: true,
-        skills: ["Figma", "UI Design", "Tailwind CSS"],
-        proposals: "20+"
-    }
-];
+import { getEscrows, subscribe, assignWorker } from "@/lib/escrow-store";
+import { formatKite, ACTIVE_NETWORK } from "@/lib/kite-config";
+import { useWallet } from "@/lib/wallet-context";
 
 export default function FindJobsPage() {
+    const { isConnected, address, connect } = useWallet();
     const [searchTerm, setSearchTerm] = useState("");
-    const [appliedJobs, setAppliedJobs] = useState<Record<number, boolean>>({});
+    const [escrows, setEscrows] = useState(getEscrows());
+
+    useEffect(() => {
+        return subscribe(() => {
+            setEscrows(getEscrows());
+        });
+    }, []);
+
+    const appliedJobs = useMemo(() => {
+        const status: Record<string, boolean> = {};
+        escrows.forEach(job => {
+            if (job.worker === address && address !== undefined && address !== "AI Managed Experts") {
+                status[job.id] = true;
+            }
+        });
+        return status;
+    }, [escrows, address]);
+
+    const handleApply = (jobId: string) => {
+        if (!isConnected) {
+            connect();
+            return;
+        }
+        if (address) {
+            assignWorker(jobId, address);
+        }
+    };
+
+    const filteredJobs = useMemo(() => {
+        return escrows.filter(job =>
+            (job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                job.description.toLowerCase().includes(searchTerm.toLowerCase())) &&
+            (job.worker === "AI Managed Experts" || !job.worker) // Only show jobs that are open or AI managed
+        );
+    }, [escrows, searchTerm]);
 
     return (
         <div className="min-h-screen bg-white">
@@ -74,7 +66,7 @@ export default function FindJobsPage() {
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div>
                             <h1 className="text-4xl font-black tracking-tight text-slate-900 uppercase">Find Jobs</h1>
-                            <p className="text-slate-500 font-medium mt-1">Browse the latest projects and apply to earn in KITE.</p>
+                            <p className="text-slate-500 font-medium mt-1">Browse the latest projects and apply to earn in {ACTIVE_NETWORK.nativeCurrency.symbol}.</p>
                         </div>
                         <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100 italic font-bold text-[10px] text-emerald-600 px-3 py-2 items-center gap-2">
                             <ShieldCheck className="w-4 h-4" /> AI VETTING ACTIVE
@@ -102,7 +94,7 @@ export default function FindJobsPage() {
 
                     {/* Job List */}
                     <div className="grid grid-cols-1 gap-6 pb-20">
-                        {JOBS.map((job) => (
+                        {filteredJobs.map((job) => (
                             <motion.div
                                 key={job.id}
                                 initial={{ opacity: 0, y: 10 }}
@@ -112,14 +104,14 @@ export default function FindJobsPage() {
                                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
                                     <div className="flex-1 space-y-5">
                                         <div className="flex flex-wrap items-center gap-3">
-                                            {job.aiVetted && (
+                                            {job.aiAuditResult && (
                                                 <Badge className="bg-emerald-600 text-white border-none font-black tracking-widest uppercase text-[9px] h-6 px-3 rounded-lg flex items-center gap-1.5 shadow-lg shadow-emerald-500/20">
                                                     <ShieldCheck className="w-3.5 h-3.5" /> AI AGENT AUDITED
                                                 </Badge>
                                             )}
                                             <Badge variant="secondary" className="text-[10px] font-black uppercase text-slate-400 p-0 hover:bg-transparent">Starting at</Badge>
                                             <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest flex items-center gap-1.5">
-                                                <Clock className="w-3.5 h-3.5" /> {job.time}
+                                                <Clock className="w-3.5 h-3.5" /> {new Date(job.createdAt).toLocaleDateString()}
                                             </span>
                                         </div>
 
@@ -132,14 +124,26 @@ export default function FindJobsPage() {
                                         </p>
 
                                         <div className="flex flex-wrap items-center gap-8 text-[11px] font-black text-slate-400 uppercase tracking-widest">
-                                            <div className="flex items-center gap-2 text-slate-900"><DollarSign className="w-4 h-4 text-emerald-600" /> {job.budget}</div>
-                                            <div className="flex items-center gap-2"><Briefcase className="w-4 h-4 text-blue-500" /> {job.type}</div>
-                                            <div className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-amber-500" /> {job.difficulty}</div>
-                                            <div className="flex items-center gap-2"><Users className="w-4 h-4 text-slate-300" /> {job.proposals} Proposals</div>
+                                            <div className="flex items-center gap-2 text-slate-900">
+                                                <DollarSign className="w-4 h-4 text-emerald-600" />
+                                                {formatKite(job.totalAmount)}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Briefcase className="w-4 h-4 text-blue-500" />
+                                                Fixed Price
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <TrendingUp className="w-4 h-4 text-amber-500" />
+                                                {job.riskLevel || "Low"} Risk
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Users className="w-4 h-4 text-slate-300" />
+                                                0 Proposals
+                                            </div>
                                         </div>
 
                                         <div className="flex flex-wrap gap-2 pt-4">
-                                            {job.skills.map(skill => (
+                                            {["Web3", "Smart Contract", ACTIVE_NETWORK.chainName].map(skill => (
                                                 <Badge key={skill} variant="secondary" className="bg-slate-50 text-slate-400 border-slate-100 font-black rounded-xl px-4 h-9 text-[10px] uppercase tracking-widest transition-all hover:bg-emerald-600 hover:text-white hover:border-emerald-600">
                                                     {skill}
                                                 </Badge>
@@ -149,7 +153,7 @@ export default function FindJobsPage() {
 
                                     <div className="lg:w-48">
                                         <Button
-                                            onClick={() => setAppliedJobs(prev => ({ ...prev, [job.id]: true }))}
+                                            onClick={() => handleApply(job.id)}
                                             disabled={appliedJobs[job.id]}
                                             className={cn(
                                                 "w-full rounded-[1.5rem] h-14 font-black shadow-xl tracking-widest text-xs uppercase transition-all active:scale-95",

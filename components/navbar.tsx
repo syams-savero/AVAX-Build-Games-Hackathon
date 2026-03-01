@@ -1,10 +1,11 @@
 "use client";
 
+import { TrendingUp } from "lucide-react"
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@/lib/wallet-context";
-import { KITE_TESTNET } from "@/lib/kite-config";
+import { KITE_TESTNET, ACTIVE_NETWORK } from "@/lib/kite-config";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -78,6 +79,7 @@ export function Navbar() {
             { href: "/marketplace", label: "Browse Services" },
             { href: "/jobs", label: "Find Jobs" },
             { href: "/freelancers", label: "Hire Freelancers" },
+            { href: "/dashboard", label: "Dashboard" },
           ].map((link) => (
             <Link
               key={link.href}
@@ -109,12 +111,47 @@ export function Navbar() {
           <div className="h-6 w-px bg-slate-200 hidden md:block"></div>
 
           <div className="flex items-center gap-4">
-            <button className="text-sm font-bold text-slate-600 hover:text-slate-900 transition-colors">
-              Sign In
-            </button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white h-11 px-6 rounded-xl font-black tracking-tight transition-all active:scale-95">
-              Join Now
-            </Button>
+            {isConnected ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="h-11 px-5 rounded-xl border-slate-200 bg-white font-black tracking-tight flex items-center gap-3 hover:bg-slate-50 transition-all">
+                    <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-slate-900">{shortAddress}</span>
+                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 border-slate-100 shadow-xl">
+                  <div className="p-3 mb-2 bg-slate-50 rounded-xl border border-slate-100">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Balance</p>
+                    <p className="text-lg font-black text-slate-900">{balance} {ACTIVE_NETWORK.nativeCurrency.symbol}</p>
+                  </div>
+                  <Link href="/dashboard" className="block">
+                    <DropdownMenuItem className="rounded-xl h-11 font-bold text-slate-600 focus:text-emerald-600 focus:bg-emerald-50 cursor-pointer gap-2">
+                      <TrendingUp className="h-4 w-4" />
+                      My Dashboard
+                    </DropdownMenuItem>
+                  </Link>
+                  <DropdownMenuItem onClick={handleCopy} className="rounded-xl h-11 font-bold text-slate-600 focus:text-emerald-600 focus:bg-emerald-50 cursor-pointer gap-2">
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                    {copied ? "Copied!" : "Copy Address"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={disconnect} className="rounded-xl h-11 font-bold text-red-600 focus:text-red-700 focus:bg-red-50 cursor-pointer gap-2">
+                    <LogOut className="h-4 w-4" />
+                    Disconnect
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button
+                onClick={connect}
+                disabled={isConnecting}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white h-11 px-6 rounded-xl font-black tracking-tight shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
+              >
+                <Wallet className="h-4 w-4 mr-2" />
+                {isConnecting ? "Connecting..." : "Connect Wallet"}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -181,7 +218,7 @@ export function Navbar() {
                   <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Connected Wallet</span>
                   <div className="flex items-center justify-between mt-1">
                     <span className="text-sm font-bold text-slate-800">{shortAddress}</span>
-                    <span className="text-xs font-bold text-emerald-600 bg-white px-2 py-0.5 rounded-lg border border-emerald-100">{balance} KITE</span>
+                    <span className="text-xs font-bold text-emerald-600 bg-white px-2 py-0.5 rounded-lg border border-emerald-100">{balance} {ACTIVE_NETWORK.nativeCurrency.symbol}</span>
                   </div>
                 </div>
                 <Button
