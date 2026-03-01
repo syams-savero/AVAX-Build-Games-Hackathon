@@ -67,9 +67,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         method: "eth_getBalance",
         params: [addr, "latest"],
       })) as string;
-      const balanceInEth = parseInt(rawBalance, 16) / 1e18;
-      setBalance(balanceInEth.toFixed(4));
-    } catch {
+
+      // Use BigInt for better precision
+      const balanceBigInt = BigInt(rawBalance);
+      const balanceInEth = Number(balanceBigInt) / 1e18;
+
+      // If balance is very small but not zero, show more decimals
+      const formattedBalance = balanceInEth === 0 ? "0" :
+        balanceInEth < 0.0001 ? balanceInEth.toFixed(6) :
+          balanceInEth.toFixed(4);
+
+      setBalance(formattedBalance);
+      console.log("Fetched balance for", addr, ":", formattedBalance);
+    } catch (err) {
+      console.error("Error fetching balance:", err);
       setBalance("0");
     }
   }, []);

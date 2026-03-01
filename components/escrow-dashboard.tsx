@@ -293,8 +293,8 @@ export function EscrowDashboard() {
   }, [refresh]);
 
   const filteredEscrows = activeTab === "employer"
-    ? escrows
-    : [];
+    ? escrows.filter(e => e.employer === address)
+    : escrows.filter(e => e.worker === address);
 
   if (!isConnected) {
     return (
