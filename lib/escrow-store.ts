@@ -114,6 +114,18 @@ export function updateMilestoneStatus(
   notify();
 }
 
+export function assignWorker(escrowId: string, workerAddress: string) {
+  escrows = escrows.map((e) => {
+    if (e.id !== escrowId) return e;
+    return {
+      ...e,
+      worker: workerAddress,
+      status: "funded", // Mark as funded/active when worker is assigned in this demo flow
+    };
+  });
+  notify();
+}
+
 export function subscribe(listener: () => void) {
   listeners.push(listener);
   return () => {

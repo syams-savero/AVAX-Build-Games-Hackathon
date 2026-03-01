@@ -64,8 +64,8 @@ export function shortenAddress(address: string): string {
 
 export function formatKite(amount: string): string {
   const num = parseFloat(amount);
-  if (isNaN(num)) return "0 KITE";
-  return `${num.toLocaleString()} KITE`;
+  if (isNaN(num)) return `0 ${ACTIVE_NETWORK.nativeCurrency.symbol}`;
+  return `${num.toLocaleString()} ${ACTIVE_NETWORK.nativeCurrency.symbol}`;
 }
 
 export const AVALANCHE_FUJI = {
