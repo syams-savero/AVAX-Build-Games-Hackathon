@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useWallet } from "@/lib/wallet-context";
 import { addEscrow } from "@/lib/escrow-store";
 import { type Milestone, type TeamMember } from "@/lib/kite-config";
+import { chatWithAI, SYSTEM_PROMPT, type ChatMessage } from "@/lib/ai";
+import { deployContract, CONTRACT_ABI, CONTRACT_BYTECODE } from "@/lib/contract";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -132,38 +134,48 @@ export function AIChat() {
   const handleMagicDemo = async (userInput: string) => {
     setIsProcessing(true);
 
-    await new Promise(r => setTimeout(r, 1200));
-    const consult: ConsultationResult = {
-      riskLevel: "Low",
-      budgetAnalysis: "Budget is well-aligned for high-quality execution.",
-      estimatedDuration: "Optimized by AI Team Selection",
-      advice: [
-        "Milestone-based release for safety",
-        "Multi-sig wallet recommended"
-      ]
-    };
+    try {
+      const chatMessages: ChatMessage[] = messages
+        .filter(m => m.role !== 'system')
+        .map(m => ({ role: m.role, content: m.content }));
 
-    const consultMsg: Message = {
-      id: `consult-${Date.now()}`,
-      role: "assistant",
-      content: `I've analyzed your project: "${userInput}".\n\n**Assessment:**\n- Risk: **${consult.riskLevel}**\n- Timeline: **Dynamic**`,
-      consultationData: consult
-    };
-    setMessages(prev => [...prev, consultMsg]);
+      chatMessages.push({ role: "user", content: userInput });
 
-    await new Promise(r => setTimeout(r, 1500));
+      const response = await chatWithAI([
+        { role: "system", content: SYSTEM_PROMPT },
+        ...chatMessages
+      ]);
 
-    const preview = generateTeamAndEscrow(userInput);
-    const teamMsg: Message = {
-      id: `team-${Date.now()}`,
-      role: "assistant",
-      content: `I have **assembled a specialized team** and drafted the secure escrow primitives on the Avalanche network.`,
-      escrowPreview: preview
-    };
+      const newMsg: Message = {
+        id: `ai-${Date.now()}`,
+        role: "assistant",
+        content: response,
+      };
 
-    setMessages(prev => [...prev, teamMsg]);
-    setIsProcessing(false);
-    setChatState("READY");
+      // Check for JSON action at the end
+      const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/);
+      if (jsonMatch) {
+        try {
+          const actionData = JSON.parse(jsonMatch[1]);
+          if (actionData.action === "DEPLOY_CONTRACT") {
+            newMsg.escrowPreview = actionData.data;
+            setChatState("READY");
+          }
+        } catch (e) {
+          console.error("Failed to parse AI action JSON", e);
+        }
+      }
+
+      setMessages(prev => [...prev, newMsg]);
+    } catch (error: any) {
+      setMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        role: "system",
+        content: `Error: ${error.message || "Failed to get response from AI"}`
+      }]);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -184,30 +196,42 @@ export function AIChat() {
 
   const handleDeploy = async (preview: EscrowPreview) => {
     setIsDeploying(true);
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      // 1. Deploy the smart contract
+      // Note: This requires CONTRACT_BYTECODE to be filled in lib/contract.ts
+      const txHash = await deployContract(CONTRACT_ABI, CONTRACT_BYTECODE, []);
 
-    const contract = addEscrow({
-      title: preview.title,
-      description: preview.description,
-      employer: address || "0xAddress",
-      worker: "AI Managed Experts",
-      totalAmount: preview.totalAmount,
-      milestones: preview.milestones,
-      status: "created",
-      contractAddress: `0x${Math.random().toString(16).slice(2, 42)}`,
-      team: preview.team,
-      riskLevel: preview.riskLevel,
-      duration: preview.duration,
-      aiAuditResult: "AUDITED - Security Score: 98/100"
-    });
+      // 2. Add to local store (simulating indexing)
+      const contract = addEscrow({
+        title: preview.title,
+        description: preview.description,
+        employer: address || "0xAddress",
+        worker: "AI Managed Experts",
+        totalAmount: preview.totalAmount,
+        milestones: preview.milestones,
+        status: "created",
+        contractAddress: txHash, // In real world, wait for receipt and get address
+        team: preview.team,
+        riskLevel: preview.riskLevel,
+        duration: preview.duration,
+        aiAuditResult: "AUDITED - Security Score: 98/100"
+      });
 
-    const deployMsg: Message = {
-      id: `deploy-${Date.now()}`,
-      role: "system",
-      content: `**Deployment Successful!** 🚀\n\nYour project is now live with an automated, AI-audited escrow. Talent has been notified.`,
-    };
-    setMessages((prev) => [...prev, deployMsg]);
-    setIsDeploying(false);
+      const deployMsg: Message = {
+        id: `deploy-${Date.now()}`,
+        role: "system",
+        content: `**Deployment Successful!** 🚀\n\nTransaction Hash: ${txHash}\n\nYour project is now live with an automated, AI-audited escrow. Talent has been notified.`,
+      };
+      setMessages((prev) => [...prev, deployMsg]);
+    } catch (error: any) {
+      setMessages((prev) => [...prev, {
+        id: `error-${Date.now()}`,
+        role: "system",
+        content: `Deployment Failed: ${error.message || "Unknown error"}`
+      }]);
+    } finally {
+      setIsDeploying(false);
+    }
   };
 
   if (!isConnected) {
