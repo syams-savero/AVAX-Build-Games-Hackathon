@@ -5,7 +5,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@/lib/wallet-context";
-import { KITE_TESTNET, ACTIVE_NETWORK } from "@/lib/kite-config";
+import { ACTIVE_NETWORK } from "@/lib/kite-config";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,13 +29,6 @@ import {
   MessageSquare,
 } from "lucide-react";
 
-const employerLinks: { href: string; label: string }[] = [];
-const freelancerLinks: { href: string; label: string }[] = [];
-
-const commonLinks = [
-  { href: "/dashboard", label: "Dashboard" },
-];
-
 export function Navbar() {
   const pathname = usePathname();
   const {
@@ -47,7 +40,7 @@ export function Navbar() {
     isCorrectChain,
     connect,
     disconnect,
-    switchToKiteTestnet,
+    switchToActiveNetwork,
   } = useWallet();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -76,9 +69,9 @@ export function Navbar() {
         {/* Center Nav */}
         <nav className="hidden items-center gap-8 lg:flex">
           {[
-            { href: "/marketplace", label: "Browse Services" },
-            { href: "/jobs", label: "Find Jobs" },
-            { href: "/freelancers", label: "Hire Freelancers" },
+            { href: "/", label: "Home" },
+            { href: "/chat", label: "Consult Assistant" },
+            { href: "/jobs", label: "Job Board" },
             { href: "/dashboard", label: "Dashboard" },
           ].map((link) => (
             <Link
@@ -97,6 +90,17 @@ export function Navbar() {
         {/* Right Section */}
         <div className="flex items-center gap-6">
           <div className="hidden items-center gap-6 md:flex">
+            {!isCorrectChain && isConnected && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={switchToActiveNetwork}
+                className="h-9 px-4 rounded-xl font-black text-[10px] uppercase tracking-widest animate-pulse"
+              >
+                <AlertTriangle className="h-3 w-3 mr-2" />
+                Switch to {ACTIVE_NETWORK.chainName}
+              </Button>
+            )}
             <button className="text-slate-500 hover:text-slate-900 transition-colors">
               <Bell className="h-5 w-5" />
             </button>
@@ -170,35 +174,12 @@ export function Navbar() {
         <div className="border-t border-slate-200 bg-white p-6 md:hidden animate-in fade-in slide-in-from-top-4">
           <nav className="flex flex-col gap-6">
             <div className="space-y-2">
-              <span className="px-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Employers</span>
-              {employerLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={`flex flex-col rounded-xl px-5 py-3 tracking-tight transition-all ${pathname === link.href ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50"}`}
-                >
-                  <span className="text-sm font-bold">{link.label}</span>
-                </Link>
-              ))}
-            </div>
-
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <span className="px-5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Freelancers</span>
-              {freelancerLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={`flex flex-col rounded-xl px-5 py-3 tracking-tight transition-all ${pathname === link.href ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50"}`}
-                >
-                  <span className="text-sm font-bold">{link.label}</span>
-                </Link>
-              ))}
-            </div>
-
-            <div className="pt-2 border-t border-slate-100">
-              {commonLinks.map((link) => (
+              {[
+                { href: "/", label: "Home" },
+                { href: "/chat", label: "Consult Assistant" },
+                { href: "/jobs", label: "Job Board" },
+                { href: "/dashboard", label: "Dashboard" },
+              ].map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -221,6 +202,16 @@ export function Navbar() {
                     <span className="text-xs font-bold text-emerald-600 bg-white px-2 py-0.5 rounded-lg border border-emerald-100">{balance} {ACTIVE_NETWORK.nativeCurrency.symbol}</span>
                   </div>
                 </div>
+                {!isCorrectChain && (
+                  <Button
+                    variant="destructive"
+                    onClick={switchToActiveNetwork}
+                    className="w-full h-12 rounded-2xl font-bold animate-pulse"
+                  >
+                    <AlertTriangle className="h-5 w-5 mr-3" />
+                    Switch to {ACTIVE_NETWORK.chainName}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   onClick={disconnect}

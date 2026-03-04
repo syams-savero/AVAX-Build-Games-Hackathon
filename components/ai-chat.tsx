@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useWallet } from "@/lib/wallet-context";
 import { addEscrow } from "@/lib/escrow-store";
-import { type Milestone, type TeamMember } from "@/lib/kite-config";
+import { type Milestone, type TeamMember, ACTIVE_NETWORK } from "@/lib/kite-config";
 import { chatWithAI, SYSTEM_PROMPT, type ChatMessage } from "@/lib/ai";
 import { deployContract, CONTRACT_ABI, CONTRACT_BYTECODE } from "@/lib/contract";
 import { Button } from "@/components/ui/button";
@@ -202,25 +202,30 @@ export function AIChat() {
       const txHash = await deployContract(CONTRACT_ABI, CONTRACT_BYTECODE, []);
 
       // 2. Add to local store (simulating indexing)
-      const contract = addEscrow({
+      const contract = await addEscrow({
         title: preview.title,
         description: preview.description,
         employer: address || "0xAddress",
         worker: "AI Managed Experts",
         totalAmount: preview.totalAmount,
-        milestones: preview.milestones,
+        milestones: preview.milestones.map((m, idx) => ({
+          ...m,
+          id: m.id || idx + 1,
+          status: m.status || "pending"
+        })),
         status: "created",
         contractAddress: txHash, // In real world, wait for receipt and get address
         team: preview.team,
         riskLevel: preview.riskLevel,
         duration: preview.duration,
+        techStack: (preview as any).techStack,
         aiAuditResult: "AUDITED - Security Score: 98/100"
       });
 
       const deployMsg: Message = {
         id: `deploy-${Date.now()}`,
         role: "system",
-        content: `**Deployment Successful!** 🚀\n\nTransaction Hash: ${txHash}\n\nYour project is now live with an automated, AI-audited escrow. Talent has been notified.`,
+        content: `**Deployment Successful!** 🚀\n\nTransaction Hash: [${txHash}](${ACTIVE_NETWORK.blockExplorerUrl}/tx/${txHash})\n\nYour project is now live with an automated, AI-audited escrow. Talent has been notified.`,
       };
       setMessages((prev) => [...prev, deployMsg]);
     } catch (error: any) {
