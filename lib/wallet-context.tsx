@@ -8,7 +8,7 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
-import { KITE_TESTNET, shortenAddress } from "./kite-config";
+import { ACTIVE_NETWORK, shortenAddress } from "./kite-config";
 
 interface WalletContextType {
   address: string | null;
@@ -20,7 +20,7 @@ interface WalletContextType {
   isCorrectChain: boolean;
   connect: () => Promise<void>;
   disconnect: () => void;
-  switchToKiteTestnet: () => Promise<void>;
+  switchToActiveNetwork: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType>({
@@ -33,7 +33,7 @@ const WalletContext = createContext<WalletContextType>({
   isCorrectChain: false,
   connect: async () => { },
   disconnect: () => { },
-  switchToKiteTestnet: async () => { },
+  switchToActiveNetwork: async () => { },
 });
 
 export function useWallet() {
@@ -57,7 +57,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isConnecting, setIsConnecting] = useState(false);
 
   const isConnected = !!address;
-  const isCorrectChain = chainId === KITE_TESTNET.chainId;
+  const isCorrectChain = chainId === ACTIVE_NETWORK.chainId;
   const shortAddress = address ? shortenAddress(address) : "";
 
   const fetchBalance = useCallback(async (addr: string) => {
@@ -85,12 +85,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const switchToKiteTestnet = useCallback(async () => {
+  const switchToActiveNetwork = useCallback(async () => {
     if (!window.ethereum) return;
     try {
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
-        params: [{ chainId: KITE_TESTNET.chainIdHex }],
+        params: [{ chainId: ACTIVE_NETWORK.chainIdHex }],
       });
     } catch (switchError: unknown) {
       const err = switchError as { code?: number };
@@ -99,11 +99,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           method: "wallet_addEthereumChain",
           params: [
             {
-              chainId: KITE_TESTNET.chainIdHex,
-              chainName: KITE_TESTNET.chainName,
-              rpcUrls: [KITE_TESTNET.rpcUrl],
-              blockExplorerUrls: [KITE_TESTNET.blockExplorerUrl],
-              nativeCurrency: KITE_TESTNET.nativeCurrency,
+              chainId: ACTIVE_NETWORK.chainIdHex,
+              chainName: ACTIVE_NETWORK.chainName,
+              rpcUrls: [ACTIVE_NETWORK.rpcUrl],
+              blockExplorerUrls: [ACTIVE_NETWORK.blockExplorerUrl],
+              nativeCurrency: ACTIVE_NETWORK.nativeCurrency,
             },
           ],
         });
@@ -200,7 +200,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         isCorrectChain,
         connect,
         disconnect,
-        switchToKiteTestnet,
+        switchToActiveNetwork,
       }}
     >
       {children}
