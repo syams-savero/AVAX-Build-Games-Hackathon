@@ -1,75 +1,42 @@
-"use client";
-
 import { type EscrowContract, type Milestone } from "./kite-config";
+import { supabase } from "./supabase";
 
-// In-memory store for demo purposes. In production, this would be backed by smart contracts.
-let escrows: EscrowContract[] = [
-  {
-    id: "esc-001",
-    title: "Landing Page Redesign",
-    description:
-      "Complete redesign of company landing page with modern UI/UX patterns and responsive design.",
-    employer: "0x1234...abcd",
-    worker: "0x5678...efgh",
-    totalAmount: "500",
-    milestones: [
-      {
-        id: 1,
-        title: "Wireframe & Mockup",
-        description: "Create wireframes and high-fidelity mockups",
-        amount: "150",
-        status: "completed",
-      },
-      {
-        id: 2,
-        title: "Frontend Development",
-        description: "Develop the frontend with React and Tailwind",
-        amount: "250",
-        status: "in_progress",
-      },
-      {
-        id: 3,
-        title: "Testing & Deployment",
-        description: "QA testing and production deployment",
-        amount: "100",
-        status: "pending",
-      },
-    ],
-    status: "in_progress",
-    createdAt: "2026-02-18T10:00:00Z",
-    contractAddress: "0xabc123...def456",
-  },
-  {
-    id: "esc-002",
-    title: "Smart Contract Audit",
-    description:
-      "Security audit of ERC-20 token smart contract including vulnerability assessment.",
-    employer: "0x9012...ijkl",
-    worker: "0x3456...mnop",
-    totalAmount: "800",
-    milestones: [
-      {
-        id: 1,
-        title: "Initial Review",
-        description: "First pass code review and automated scanning",
-        amount: "300",
-        status: "completed",
-      },
-      {
-        id: 2,
-        title: "Detailed Report",
-        description: "Comprehensive vulnerability report with recommendations",
-        amount: "500",
-        status: "pending",
-      },
-    ],
-    status: "in_progress",
-    createdAt: "2026-02-20T14:30:00Z",
-    contractAddress: "0xdef789...ghi012",
-  },
-];
-
+// In-memory store that syncs with Supabase
+let escrows: EscrowContract[] = [];
 let listeners: (() => void)[] = [];
+
+// Initialize: Load from Supabase if available
+async function load() {
+  try {
+    const { data, error } = await supabase
+      .from('escrows')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    if (data) {
+      // Map snake_case from DB to camelCase for the app
+      escrows = data.map((item: any) => ({
+        ...item,
+        totalAmount: item.total_amount,
+        createdAt: item.created_at,
+        contractAddress: item.contract_address,
+        riskLevel: item.risk_level,
+        githubUrl: item.github_url,
+        aiAuditResult: item.ai_audit_result,
+        techStack: item.tech_stack,
+        employer: item.employer,
+        worker: item.worker
+      })) as EscrowContract[];
+      notify();
+    }
+  } catch (err: any) {
+    console.error("Supabase load error:", err.message || err);
+  }
+}
+
+// Initial load
+load();
 
 function notify() {
   listeners.forEach((fn) => fn());
@@ -83,47 +50,108 @@ export function getEscrowById(id: string): EscrowContract | undefined {
   return escrows.find((e) => e.id === id);
 }
 
-export function addEscrow(escrow: Omit<EscrowContract, "id" | "createdAt">): EscrowContract {
+export async function addEscrow(escrow: Omit<EscrowContract, "id" | "createdAt">): Promise<EscrowContract> {
   const newEscrow: EscrowContract = {
     ...escrow,
     id: `esc-${Date.now()}`,
     createdAt: new Date().toISOString(),
   };
+
+  // Immediate local update for UI responsiveness
   escrows = [newEscrow, ...escrows];
   notify();
+
+  // Map to snake_case for Supabase insertion
+  const dbData = {
+    id: newEscrow.id,
+    title: newEscrow.title,
+    description: newEscrow.description,
+    employer: newEscrow.employer,
+    worker: newEscrow.worker,
+    total_amount: newEscrow.totalAmount,
+    milestones: newEscrow.milestones,
+    status: newEscrow.status,
+    created_at: newEscrow.createdAt,
+    contract_address: newEscrow.contractAddress,
+    team: newEscrow.team,
+    risk_level: newEscrow.riskLevel,
+    duration: newEscrow.duration,
+    tech_stack: newEscrow.techStack,
+    github_url: newEscrow.githubUrl,
+    ai_audit_result: newEscrow.aiAuditResult
+  };
+
+  const { error } = await supabase.from('escrows').insert([dbData]);
+  if (error) {
+    console.error("Supabase insert error:", error);
+    // Optionally rollback local state or show error
+  }
+
   return newEscrow;
 }
 
-export function updateMilestoneStatus(
+export async function updateMilestoneStatus(
   escrowId: string,
   milestoneId: number,
   status: Milestone["status"]
 ) {
-  escrows = escrows.map((e) => {
+  let updatedEscrow: EscrowContract | null = null;
+
+  escrows = escrows.map((e: EscrowContract) => {
     if (e.id !== escrowId) return e;
-    const milestones = e.milestones.map((m) =>
+    const milestones = e.milestones.map((m: Milestone) =>
       m.id === milestoneId ? { ...m, status } : m
     );
     const allCompleted = milestones.every((m) => m.status === "completed");
-    return {
+    updatedEscrow = {
       ...e,
       milestones,
       status: allCompleted ? "completed" : e.status,
     };
+    return updatedEscrow;
   });
+
   notify();
+
+  if (updatedEscrow) {
+    const { error } = await supabase
+      .from('escrows')
+      .update({
+        milestones: (updatedEscrow as EscrowContract).milestones,
+        status: (updatedEscrow as EscrowContract).status,
+      })
+      .eq('id', escrowId);
+
+    if (error) console.error("Supabase update error:", error);
+  }
 }
 
-export function assignWorker(escrowId: string, workerAddress: string) {
-  escrows = escrows.map((e) => {
+export async function assignWorker(escrowId: string, workerAddress: string) {
+  let updatedEscrow: EscrowContract | null = null;
+
+  escrows = escrows.map((e: EscrowContract) => {
     if (e.id !== escrowId) return e;
-    return {
+    updatedEscrow = {
       ...e,
       worker: workerAddress,
-      status: "funded", // Mark as funded/active when worker is assigned in this demo flow
+      status: "funded",
     };
+    return updatedEscrow;
   });
+
   notify();
+
+  if (updatedEscrow) {
+    const { error } = await supabase
+      .from('escrows')
+      .update({
+        worker: workerAddress,
+        status: "funded",
+      })
+      .eq('id', escrowId);
+
+    if (error) console.error("Supabase worker assignment error:", error);
+  }
 }
 
 export function subscribe(listener: () => void) {
