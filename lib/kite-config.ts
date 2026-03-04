@@ -54,6 +54,8 @@ export interface EscrowContract {
   team?: TeamMember[];
   riskLevel?: "Low" | "Medium" | "High";
   duration?: string;
+  techStack?: string[];
+  githubUrl?: string;
   aiAuditResult?: string;
 }
 
