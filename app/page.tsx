@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useMotionValue, useSpring, motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -28,6 +28,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { getEscrows, subscribe } from "@/lib/escrow-store";
+import { formatKite, ACTIVE_NETWORK } from "@/lib/kite-config";
 
 const CATEGORIES = [
   { title: "Graphics & Design", count: "2,345 services", icon: Palette },
@@ -111,6 +113,20 @@ const FEATURED_JOBS = [
 
 export default function AppHome() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [escrows, setEscrows] = useState(getEscrows());
+
+  useEffect(() => {
+    return subscribe(() => {
+      setEscrows(getEscrows());
+    });
+  }, []);
+
+  const featuredJobs = useMemo(() => {
+    return escrows
+      .filter(e => !e.worker || e.worker === "AI Managed Experts")
+      .slice(0, 3);
+  }, [escrows]);
+
   const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
@@ -357,45 +373,7 @@ export default function AppHome() {
         </div>
       </section >
 
-      {/* Popular Services */}
-      < section className="bg-slate-50 px-4 py-20 sm:px-6 lg:px-8" >
-        <div className="mx-auto max-w-7xl">
-          <div className="flex items-center justify-between mb-12">
-            <h2 className="text-3xl font-black tracking-tight text-slate-900">Popular Services</h2>
-            <Link href="/marketplace" className="text-emerald-600 font-bold flex items-center gap-2 group">
-              View All <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-            </Link>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            {POPULAR_SERVICES.map((service, i) => (
-              <Card key={i} className="overflow-hidden border-slate-200 bg-white rounded-2xl hover:shadow-xl transition-all group">
-                <div className="aspect-video relative overflow-hidden bg-slate-100">
-                  <img src={service.image} alt={service.title} className="object-cover w-full h-full group-hover:scale-110 transition-transform duration-500" />
-                </div>
-                <div className="p-5">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="h-8 w-8 rounded-full bg-slate-200" />
-                    <div>
-                      <p className="text-sm font-black text-slate-900">{service.name}</p>
-                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{service.rank}</p>
-                    </div>
-                  </div>
-                  <p className="text-sm font-bold text-slate-700 leading-snug line-clamp-2 h-10 mb-4">{service.title}</p>
-                  <div className="flex items-center gap-1 text-amber-400 mb-6">
-                    <Star className="h-4 w-4 fill-current" />
-                    <span className="text-sm font-black text-slate-900">{service.rating}</span>
-                    <span className="text-xs font-bold text-slate-400">({service.reviews})</span>
-                  </div>
-                  <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Starting at</span>
-                    <span className="text-lg font-black text-slate-900">${service.price.split('$')[1]}</span>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section >
+      {/* Removed Popular Services section */}
 
       {/* Featured Jobs */}
       < section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8" >
@@ -406,33 +384,47 @@ export default function AppHome() {
           </Link>
         </div>
         <div className="space-y-6">
-          {FEATURED_JOBS.map((job, i) => (
-            <Card key={i} className="p-8 border-slate-200 hover:border-emerald-200 hover:bg-emerald-50/10 transition-all rounded-[2rem] flex flex-col md:flex-row md:items-center justify-between gap-8">
-              <div className="flex-1">
-                <h3 className="text-xl font-black text-slate-900 mb-2">{job.title}</h3>
-                <div className="flex items-center gap-4 text-sm text-slate-400 mb-4">
-                  <span className="font-bold text-slate-600">{job.company}</span>
-                  <span>•</span>
-                  <span>{job.time}</span>
+          {featuredJobs.length > 0 ? (
+            featuredJobs.map((job) => (
+              <Card key={job.id} className="p-8 border-slate-200 hover:border-emerald-200 hover:bg-emerald-50/10 transition-all rounded-[2rem] flex flex-col md:flex-row md:items-center justify-between gap-8">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-xl font-black text-slate-900">{job.title}</h3>
+                    {job.aiAuditResult && (
+                      <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 font-bold text-[10px]">AI AUDITED</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 text-sm text-slate-400 mb-4">
+                    <span className="font-bold text-slate-600 truncate max-w-[150px] inline-block">{job.employer}</span>
+                    <span>•</span>
+                    <span>{new Date(job.createdAt).toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-6">
+                    {(job.techStack || []).map(tag => (
+                      <Badge key={tag} variant="secondary" className="bg-slate-100 text-slate-500 rounded-lg px-3 py-1 font-bold text-xs">{tag}</Badge>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-6 text-sm font-bold text-slate-500 italic">
+                    <span className="text-emerald-600 not-italic font-black">{formatKite(job.totalAmount)}</span>
+                    <span>•</span>
+                    <span>{job.duration || "N/A"}</span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5" /> {job.riskLevel || "Low"} Risk</span>
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2 mb-6">
-                  {job.tags.map(tag => (
-                    <Badge key={tag} variant="secondary" className="bg-slate-100 text-slate-500 rounded-lg px-3 py-1 font-bold text-xs">{tag}</Badge>
-                  ))}
-                </div>
-                <div className="flex flex-wrap gap-6 text-sm font-bold text-slate-500 italic">
-                  <span>{job.price}</span>
-                  <span>•</span>
-                  <span>{job.duration}</span>
-                  <span>•</span>
-                  <span>{job.proposals}</span>
-                </div>
-              </div>
-              <Button className="h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 rounded-xl shrink-0">
-                Apply Now
-              </Button>
-            </Card>
-          ))}
+                <Link href="/jobs">
+                  <Button className="h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 rounded-xl shrink-0">
+                    Apply Now
+                  </Button>
+                </Link>
+              </Card>
+            ))
+          ) : (
+            <div className="py-20 text-center border-2 border-dashed border-slate-100 rounded-[2rem]">
+              <p className="text-slate-400 font-bold uppercase tracking-widest">No active jobs found. Be the first to post!</p>
+              <Link href="/chat" className="mt-4 inline-block text-emerald-600 font-black text-sm hover:underline">Start Consultation →</Link>
+            </div>
+          )}
         </div>
       </section >
 
@@ -504,14 +496,14 @@ export default function AppHome() {
             Join millions of people who use ChainLancer to turn their ideas into reality
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
-            <Link href="/freelancers">
+            <Link href="/chat">
               <Button className="h-14 bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-500/20">
-                <Briefcase className="w-5 h-5" /> Hire a Freelancer
+                <Briefcase className="w-5 h-5" /> Start Consultation
               </Button>
             </Link>
             <Link href="/jobs">
               <Button variant="outline" className="h-14 border-slate-200 text-slate-900 font-black px-8 rounded-xl flex items-center gap-2 hover:bg-slate-50 transition-all">
-                <TrendingUp className="w-5 h-5" /> Find Work
+                <TrendingUp className="w-5 h-5" /> View Job Board
               </Button>
             </Link>
           </div>

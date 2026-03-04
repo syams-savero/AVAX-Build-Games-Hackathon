@@ -10,7 +10,9 @@ import {
     Briefcase,
     TrendingUp,
     Clock,
-    Users
+    Users,
+    Github,
+    Loader2
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,13 +42,32 @@ export default function FindJobsPage() {
         return status;
     }, [escrows, address]);
 
-    const handleApply = (jobId: string) => {
+    const [isScreening, setIsScreening] = useState<string | null>(null);
+    const [screeningResult, setScreeningResult] = useState<{ id: string, score: number, comment: string } | null>(null);
+
+    const handleApply = async (jobId: string) => {
         if (!isConnected) {
             connect();
             return;
         }
+
+        setIsScreening(jobId);
+        // Simulated AI Screening Logic
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        const score = Math.floor(Math.random() * 20) + 80; // 80-100
+        setScreeningResult({
+            id: jobId,
+            score,
+            comment: `AI Analysis: GitHub profile strong in ${escrows.find(e => e.id === jobId)?.techStack?.join(", ") || "Web3"}. On-chain reputation: High.`
+        });
+    };
+
+    const handleConfirmSelection = async (jobId: string) => {
         if (address) {
-            assignWorker(jobId, address);
+            await assignWorker(jobId, address);
+            setIsScreening(null);
+            setScreeningResult(null);
         }
     };
 
@@ -54,7 +75,7 @@ export default function FindJobsPage() {
         return escrows.filter(job =>
             (job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 job.description.toLowerCase().includes(searchTerm.toLowerCase())) &&
-            (job.worker === "AI Managed Experts" || !job.worker) // Only show jobs that are open or AI managed
+            (job.worker === "AI Managed Experts" || !job.worker || job.worker === "0x5678...efgh" || job.worker === "0xAddress") // Show open and demo jobs
         );
     }, [escrows, searchTerm]);
 
@@ -143,7 +164,7 @@ export default function FindJobsPage() {
                                         </div>
 
                                         <div className="flex flex-wrap gap-2 pt-4">
-                                            {["Web3", "Smart Contract", ACTIVE_NETWORK.chainName].map(skill => (
+                                            {(job.techStack || ["Web3", "Smart Contract", ACTIVE_NETWORK.chainName]).map((skill: string) => (
                                                 <Badge key={skill} variant="secondary" className="bg-slate-50 text-slate-400 border-slate-100 font-black rounded-xl px-4 h-9 text-[10px] uppercase tracking-widest transition-all hover:bg-emerald-600 hover:text-white hover:border-emerald-600">
                                                     {skill}
                                                 </Badge>
@@ -154,18 +175,48 @@ export default function FindJobsPage() {
                                     <div className="lg:w-48">
                                         <Button
                                             onClick={() => handleApply(job.id)}
-                                            disabled={appliedJobs[job.id]}
+                                            disabled={!!appliedJobs[job.id] || !!isScreening}
                                             className={cn(
                                                 "w-full rounded-[1.5rem] h-14 font-black shadow-xl tracking-widest text-xs uppercase transition-all active:scale-95",
                                                 appliedJobs[job.id]
-                                                    ? "bg-slate-100 text-slate-400 shadow-none cursor-default"
+                                                    ? "bg-emerald-600 text-white shadow-none cursor-default"
                                                     : "bg-slate-900 hover:bg-emerald-600 text-white shadow-slate-900/10"
                                             )}
                                         >
-                                            {appliedJobs[job.id] ? "Applied" : "Apply Now"}
+                                            {isScreening === job.id ? (
+                                                <div className="flex items-center gap-2">
+                                                    <Loader2 className="w-4 h-4 animate-spin" /> Screening...
+                                                </div>
+                                            ) : appliedJobs[job.id] ? "Hired" : "Apply Now"}
                                         </Button>
                                     </div>
                                 </div>
+
+                                {screeningResult?.id === job.id && (
+                                    <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        className="mt-8 pt-8 border-t border-slate-100"
+                                    >
+                                        <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-12 w-12 rounded-2xl bg-white border border-emerald-200 flex items-center justify-center text-emerald-600 font-black shadow-sm">
+                                                    {screeningResult?.score}%
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-black text-slate-900 text-sm uppercase italic">AI Match Result</h4>
+                                                    <p className="text-xs text-slate-500 font-medium">{screeningResult?.comment}</p>
+                                                </div>
+                                            </div>
+                                            <Button
+                                                onClick={() => handleConfirmSelection(job.id)}
+                                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 rounded-xl h-11 shadow-lg shadow-emerald-500/20"
+                                            >
+                                                Confirm Assignment
+                                            </Button>
+                                        </div>
+                                    </motion.div>
+                                )}
                             </motion.div>
                         ))}
                     </div>
