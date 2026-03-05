@@ -16,7 +16,7 @@ export async function chatWithAI(messages: ChatMessage[]) {
     },
     body: JSON.stringify({
       messages,
-      systemPrompt: SYSTEM_PROMPT,
+      // System prompt is now handled server-side only for security
     }),
   });
 
@@ -71,16 +71,52 @@ Language: Respond in English.
 Be professional, concise, and helpful.
 `;
 
+// Validate that URL is a legitimate GitHub URL to prevent SSRF
+function isValidGithubUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'github.com' || parsed.hostname === 'raw.githubusercontent.com';
+  } catch {
+    return false;
+  }
+}
+
 export async function auditCode(githubUrl: string, projectRequirements: string) {
   try {
+    // Security: Validate GitHub URL to prevent SSRF attacks
+    if (!isValidGithubUrl(githubUrl)) {
+      return {
+        score: 0,
+        status: "FAIL" as const,
+        feedback: "Invalid URL. Only GitHub URLs (github.com) are accepted for security auditing.",
+        highlights: ["URL validation failed"]
+      };
+    }
+
     // Convert GitHub URL to Raw content
     const rawUrl = githubUrl
       .replace("github.com", "raw.githubusercontent.com")
       .replace("/blob/", "/");
 
     const codeResponse = await fetch(rawUrl);
-    if (!codeResponse.ok) throw new Error("Failed to fetch source code from GitHub.");
+    if (!codeResponse.ok) {
+      return {
+        score: 0,
+        status: "FAIL" as const,
+        feedback: "Failed to fetch source code from GitHub. Please verify the URL is correct and the repository is public.",
+        highlights: ["HTTP " + codeResponse.status]
+      };
+    }
     const sourceCode = await codeResponse.text();
+
+    if (!sourceCode || sourceCode.trim().length < 10) {
+      return {
+        score: 0,
+        status: "FAIL" as const,
+        feedback: "Source code is empty or too short to audit.",
+        highlights: ["Empty source code"]
+      };
+    }
 
     const auditPrompt = `
       You are an expert Smart Contract and Web3 Security Auditor.
@@ -101,13 +137,13 @@ export async function auditCode(githubUrl: string, projectRequirements: string) 
       }
 
       CODE TO AUDIT:
-      ${sourceCode.substring(0, 10000)}
+      ${sourceCode.substring(0, 8000)}
     `;
 
     const response = await chatWithAI([{ role: "assistant", content: "I am ready to audit the code." }, { role: "user", content: auditPrompt }]);
 
     // Attempt to parse JSON
-    const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || response.match(/{[\s\S]*?}/);
+    const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || response.match(/\{[\s\S]*?\}/);
     if (jsonMatch) {
       try {
         const result = JSON.parse(jsonMatch[1] || jsonMatch[0]);
@@ -117,16 +153,18 @@ export async function auditCode(githubUrl: string, projectRequirements: string) 
       }
     }
 
+    // SECURITY FIX: Fallback is FAIL, not PASS — unparseable audit = failed audit
     return {
-      score: 70,
-      status: "PASS",
-      feedback: "Audit completed but failed to parse details. Manual review recommended."
+      score: 0,
+      status: "FAIL" as const,
+      feedback: "Audit completed but AI response could not be parsed. Manual review required. Do NOT approve this submission.",
+      highlights: ["Parsing error — manual review needed"]
     };
   } catch (error: any) {
     console.error("Audit error:", error);
     return {
       score: 0,
-      status: "FAIL",
+      status: "FAIL" as const,
       feedback: `Audit failed: ${error.message}`
     };
   }

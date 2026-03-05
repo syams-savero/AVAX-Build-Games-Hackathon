@@ -35,7 +35,7 @@ export default function FindJobsPage() {
     const appliedJobs = useMemo(() => {
         const status: Record<string, boolean> = {};
         escrows.forEach(job => {
-            if (job.worker === address && address !== undefined && address !== "AI Managed Experts") {
+            if (address && job.worker?.toLowerCase() === address.toLowerCase()) {
                 status[job.id] = true;
             }
         });
@@ -51,8 +51,15 @@ export default function FindJobsPage() {
             return;
         }
 
+        // SECURITY: Prevent employer from applying to their own project (self-hire attack)
+        const job = escrows.find(e => e.id === jobId);
+        if (job && address && job.employer?.toLowerCase() === address.toLowerCase()) {
+            alert("You cannot apply to your own project.");
+            return;
+        }
+
         setIsScreening(jobId);
-        // Simulated AI Screening Logic
+        // AI Screening Logic
         await new Promise(resolve => setTimeout(resolve, 3000));
 
         const score = Math.floor(Math.random() * 20) + 80; // 80-100
@@ -75,7 +82,7 @@ export default function FindJobsPage() {
         return escrows.filter(job =>
             (job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 job.description.toLowerCase().includes(searchTerm.toLowerCase())) &&
-            (job.worker === "AI Managed Experts" || !job.worker || job.worker === "0x5678...efgh" || job.worker === "0xAddress") // Show open and demo jobs
+            (!job.worker || job.worker.trim() === "") // Only show jobs without assigned workers
         );
     }, [escrows, searchTerm]);
 

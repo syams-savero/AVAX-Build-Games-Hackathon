@@ -199,14 +199,16 @@ export function AIChat() {
     try {
       // 1. Deploy the smart contract
       // Note: This requires CONTRACT_BYTECODE to be filled in lib/contract.ts
-      const txHash = await deployContract(CONTRACT_ABI, CONTRACT_BYTECODE, []);
+      const result = await deployContract(CONTRACT_ABI, CONTRACT_BYTECODE, []);
+      const txHash = result.txHash;
+      const contractAddr = result.contractAddress || txHash; // fallback to txHash if receipt fails
 
       // 2. Add to local store (simulating indexing)
       const contract = await addEscrow({
         title: preview.title,
         description: preview.description,
         employer: address || "0xAddress",
-        worker: "AI Managed Experts",
+        worker: "", // No worker assigned yet - freelancer will apply via /jobs
         totalAmount: preview.totalAmount,
         milestones: preview.milestones.map((m, idx) => ({
           ...m,
@@ -214,12 +216,12 @@ export function AIChat() {
           status: m.status || "pending"
         })),
         status: "created",
-        contractAddress: txHash, // In real world, wait for receipt and get address
+        contractAddress: contractAddr,
         team: preview.team,
         riskLevel: preview.riskLevel,
         duration: preview.duration,
         techStack: (preview as any).techStack,
-        aiAuditResult: "AUDITED - Security Score: 98/100"
+        aiAuditResult: "" // Will be populated when freelancer submits and AI audits
       });
 
       const deployMsg: Message = {

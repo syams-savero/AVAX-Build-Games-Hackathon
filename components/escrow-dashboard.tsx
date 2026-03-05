@@ -99,7 +99,7 @@ function EscrowCard({
   const completedMilestones = escrow.milestones.filter(
     (m) => m.status === "completed"
   ).length;
-  const progress = (completedMilestones / escrow.milestones.length) * 100;
+  const progress = escrow.milestones.length > 0 ? (completedMilestones / escrow.milestones.length) * 100 : 0;
 
   const [githubUrl, setGithubUrl] = useState(escrow.githubUrl || "");
   const [isAuditing, setIsAuditing] = useState(false);
@@ -122,7 +122,7 @@ function EscrowCard({
     try {
       const result = await auditCode(githubUrl, escrow.description);
 
-      if (result.status === "PASS" || result.score >= 70) {
+      if (result.status === "PASS" && result.score >= 70) {
         toast.success(`Audit Passed (${result.score}/100)`, {
           description: result.feedback,
           id: auditToast
@@ -204,7 +204,7 @@ function EscrowCard({
             <div className="flex flex-col">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">On-Chain</span>
               <a
-                href={`${ACTIVE_NETWORK.blockExplorerUrl}/address/${escrow.contractAddress}`}
+                href={`${ACTIVE_NETWORK.blockExplorerUrl}/tx/${escrow.contractAddress}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:underline"
@@ -382,8 +382,8 @@ export function EscrowDashboard() {
   }, [refresh]);
 
   const filteredEscrows = activeTab === "employer"
-    ? escrows.filter(e => e.employer === address)
-    : escrows.filter(e => e.worker === address);
+    ? escrows.filter(e => e.employer?.toLowerCase() === address?.toLowerCase())
+    : escrows.filter(e => e.worker?.toLowerCase() === address?.toLowerCase());
 
   if (!isConnected) {
     return (
@@ -434,7 +434,7 @@ export function EscrowDashboard() {
           <div className="flex items-center gap-3">
             <span className="text-sm font-black text-slate-900">{shortAddress}</span>
             <span className="h-4 w-px bg-slate-300" />
-            <span className="text-xs font-bold text-emerald-600">{balance} KITE</span>
+            <span className="text-xs font-bold text-emerald-600">{balance} AVAX</span>
           </div>
         </div>
       </div>
@@ -444,7 +444,7 @@ export function EscrowDashboard() {
           { label: "Active Project", value: filteredEscrows.filter(e => e.status !== 'completed').length, icon: Zap },
           { label: "Total Committed", value: `$${filteredEscrows.reduce((acc, curr) => acc + parseFloat(curr.totalAmount || "0"), 0).toLocaleString()}`, icon: TrendingUp },
           { label: "Contracts Completed", value: filteredEscrows.filter(e => e.status === 'completed').length, icon: CheckCircle2 },
-          { label: "AI Audit Success", value: filteredEscrows.length > 0 ? "99.8%" : "100%", icon: ShieldCheck },
+          { label: "AI Audit Success", value: filteredEscrows.filter(e => e.aiAuditResult).length > 0 ? `${Math.round((filteredEscrows.filter(e => e.aiAuditResult).length / filteredEscrows.length) * 100)}%` : "N/A", icon: ShieldCheck },
           { label: "Total Workers", value: filteredEscrows.reduce((acc, curr) => acc + (curr.team?.length || 0), 0), icon: Users },
         ].map((stat, i) => (
           <Card key={i} className="border border-slate-200 bg-white p-5 rounded-3xl shadow-sm">
@@ -475,7 +475,7 @@ export function EscrowDashboard() {
               <FileCode2 className="h-7 w-7" />
             </div>
             <p className="text-sm font-bold text-slate-400 tracking-tight">No active items found in your {activeTab === 'employer' ? 'Hires' : 'Gigs'}.</p>
-            <Link href={activeTab === 'employer' ? "/chat" : "/marketplace"}>
+            <Link href={activeTab === 'employer' ? "/chat" : "/jobs"}>
               <Button variant="link" className="mt-2 text-emerald-600 font-black flex items-center gap-2 hover:no-underline hover:text-emerald-700">
                 {activeTab === 'employer' ? "Hire your first team" : "Find projects to earn"}
                 <ArrowRight className="h-4 w-4" />
