@@ -5,7 +5,8 @@ import { useWallet } from "@/lib/wallet-context";
 import { addEscrow } from "@/lib/escrow-store";
 import { type Milestone, type TeamMember, ACTIVE_NETWORK } from "@/lib/kite-config";
 import { chatWithAI, SYSTEM_PROMPT, type ChatMessage } from "@/lib/ai";
-import { deployContract, CONTRACT_ABI, CONTRACT_BYTECODE } from "@/lib/contract";
+import { CONTRACT_ABI, CONTRACT_BYTECODE } from "@/lib/contract";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +40,7 @@ interface EscrowPreview {
   title: string;
   description: string;
   milestones: Milestone[];
-  totalAmount: string;
+  totalAmount: string; // Always in AVAX (e.g. "0.5")
   team?: TeamMember[];
   riskLevel: "Low" | "Medium" | "High";
   duration: string;
@@ -58,8 +59,12 @@ const WELCOME_MSG: Message = {
   id: "welcome",
   role: "assistant",
   content:
-    "Welcome to ChainLancer AI. I'm your autonomous recruiter and project auditor. \n\nI analyze your needs, assemble expert teams, and secure your project lifecycle on the Avalanche network. \n\n**What can I help you build today?**",
+    "Welcome to ChainLancer AI. I'm your autonomous recruiter and project auditor. \n\nI analyze your needs, assemble expert teams, and secure your project lifecycle on the Avalanche network. \n\n**What can I help you build today?**\n\n💡 Tip: Mention your budget in AVAX, e.g. *\"Build a website, budget 0.5 AVAX, 2 weeks\"*",
 };
+
+// ─── MAX AVAX GUARD (testnet safety) ────────────────────────────────────────
+const MAX_AVAX_TESTNET = 10;
+const DEFAULT_AVAX_AMOUNT = "0.1";
 
 export function AIChat() {
   const { isConnected, address, connect, isConnecting } = useWallet();
@@ -80,18 +85,45 @@ export function AIChat() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  const generateTeamAndEscrow = (userInput: string): EscrowPreview => {
-    const lower = userInput.toLowerCase();
-    const amountMatch = lower.match(/(\d+(?:,\d+)?)\s*(?:kite|token|usd|\$)/);
-    const rawAmount = amountMatch ? amountMatch[1].replace(/,/g, "") : "10000";
-    const totalAmount = parseInt(rawAmount);
+  // ─── Parse AVAX amount from user message ──────────────────────────────────
+  const parseAvaxAmount = (text: string): string => {
+    const lower = text.toLowerCase();
 
-    const isHighBudget = totalAmount >= 20000;
+    // Match patterns like: "0.5 avax", "1.5avax", "2 avax"
+    const avaxMatch = lower.match(/(\d+(?:\.\d+)?)\s*avax/);
+    if (avaxMatch) {
+      const val = parseFloat(avaxMatch[1]);
+      if (!isNaN(val) && val > 0) {
+        // Cap at max testnet amount
+        return String(Math.min(val, MAX_AVAX_TESTNET));
+      }
+    }
+
+    return DEFAULT_AVAX_AMOUNT;
+  };
+
+  const generateTeamAndEscrow = (userInput: string): EscrowPreview => {
+    // ✅ FIX: Parse AVAX amount properly (not USD string)
+    const totalAmountAvax = parseFloat(parseAvaxAmount(userInput));
+
+    const isHighBudget = totalAmountAvax >= 1; // >= 1 AVAX = high budget
 
     const team: TeamMember[] = isHighBudget ? [
-      { role: "Lead Developer", description: "Architecture & Smart Contracts", budget: String(Math.floor(totalAmount * 0.5)) },
-      { role: "Security Auditor", description: "Independent Bug Hunting", budget: String(Math.floor(totalAmount * 0.3)) },
-      { role: "UI Engineer", description: "Frontend Integration", budget: String(Math.floor(totalAmount * 0.2)) }
+      {
+        role: "Lead Developer",
+        description: "Architecture & Smart Contracts",
+        budget: String((totalAmountAvax * 0.5).toFixed(4))
+      },
+      {
+        role: "Security Auditor",
+        description: "Independent Bug Hunting",
+        budget: String((totalAmountAvax * 0.3).toFixed(4))
+      },
+      {
+        role: "UI Engineer",
+        description: "Frontend Integration",
+        budget: String((totalAmountAvax * 0.2).toFixed(4))
+      }
     ] : [];
 
     const milestones: Milestone[] = [
@@ -99,7 +131,7 @@ export function AIChat() {
         id: 1,
         title: "Drafting & Security Audit",
         description: "Initial smart contract draft and audit verification.",
-        amount: String(Math.floor(totalAmount * 0.3)),
+        amount: String((totalAmountAvax * 0.3).toFixed(4)),
         status: "pending",
         earlyBonus: "5%"
       },
@@ -107,7 +139,7 @@ export function AIChat() {
         id: 2,
         title: "Core Development",
         description: "Main feature implementation and on-chain logic.",
-        amount: String(Math.floor(totalAmount * 0.5)),
+        amount: String((totalAmountAvax * 0.5).toFixed(4)),
         status: "pending",
         earlyBonus: "10%"
       },
@@ -115,7 +147,7 @@ export function AIChat() {
         id: 3,
         title: "Final Audit & Release",
         description: "Final verification and mainnet deployment.",
-        amount: String(Math.floor(totalAmount * 0.2)),
+        amount: String((totalAmountAvax * 0.2).toFixed(4)),
         status: "pending"
       }
     ];
@@ -123,11 +155,11 @@ export function AIChat() {
     return {
       title: "Custom AI-Vetted Project",
       description: userInput,
-      totalAmount: String(totalAmount),
+      totalAmount: String(totalAmountAvax), // ✅ Always AVAX, e.g. "0.5"
       milestones,
       team: team.length > 0 ? team : undefined,
-      riskLevel: totalAmount > 50000 ? "Medium" : "Low",
-      duration: totalAmount > 20000 ? "4 Weeks" : "1 Week"
+      riskLevel: totalAmountAvax > 5 ? "Medium" : "Low",
+      duration: totalAmountAvax > 1 ? "4 Weeks" : "1 Week"
     };
   };
 
@@ -136,7 +168,7 @@ export function AIChat() {
 
     try {
       const chatMessages: ChatMessage[] = messages
-        .filter(m => m.role !== 'system')
+        .filter(m => m.role !== "system")
         .map(m => ({ role: m.role, content: m.content }));
 
       chatMessages.push({ role: "user", content: userInput });
@@ -158,11 +190,30 @@ export function AIChat() {
         try {
           const actionData = JSON.parse(jsonMatch[1]);
           if (actionData.action === "DEPLOY_CONTRACT") {
-            newMsg.escrowPreview = actionData.data;
+            // ✅ Re-parse totalAmount to make sure it's valid AVAX
+            const rawPreview = actionData.data as EscrowPreview;
+            const safeAmount = parseFloat(parseAvaxAmount(userInput));
+            newMsg.escrowPreview = {
+              ...rawPreview,
+              totalAmount: String(safeAmount),
+            };
             setChatState("READY");
           }
         } catch (e) {
           console.error("Failed to parse AI action JSON", e);
+          // Fallback: generate escrow from user input directly
+          newMsg.escrowPreview = generateTeamAndEscrow(userInput);
+          setChatState("READY");
+        }
+      } else {
+        // If AI didn't return JSON but user seems ready to deploy,
+        // auto-generate an escrow preview
+        const lower = userInput.toLowerCase();
+        const hasAvax = lower.includes("avax");
+        const hasProject = lower.length > 20;
+        if (hasAvax && hasProject) {
+          newMsg.escrowPreview = generateTeamAndEscrow(userInput);
+          setChatState("READY");
         }
       }
 
@@ -195,46 +246,96 @@ export function AIChat() {
   };
 
   const handleDeploy = async (preview: EscrowPreview) => {
-    setIsDeploying(true);
-    try {
-      // 1. Deploy the smart contract
-      // Note: This requires CONTRACT_BYTECODE to be filled in lib/contract.ts
-      const result = await deployContract(CONTRACT_ABI, CONTRACT_BYTECODE, []);
-      const txHash = result.txHash;
-      const contractAddr = result.contractAddress || txHash; // fallback to txHash if receipt fails
+    // ✅ VALIDATION GUARD before sending transaction
+    const avaxAmount = parseFloat(preview.totalAmount);
 
-      // 2. Add to local store (simulating indexing)
-      const contract = await addEscrow({
+    if (isNaN(avaxAmount) || avaxAmount <= 0) {
+      toast.error("Invalid budget amount. Please specify a valid AVAX amount.");
+      return;
+    }
+
+    if (avaxAmount > MAX_AVAX_TESTNET) {
+      toast.error(
+        `Budget ${avaxAmount} AVAX exceeds testnet limit of ${MAX_AVAX_TESTNET} AVAX. Please reduce your budget.`
+      );
+      return;
+    }
+
+    setIsDeploying(true);
+    let deployToast = toast.loading("Initiating on-chain transaction...");
+
+    try {
+      const { createProjectOnChain, CONTRACT_ADDRESS, CONTRACT_ABI } = await import("@/lib/contract");
+      const { ethers } = await import("ethers");
+
+      console.log(`Deploying project with budget: ${avaxAmount} AVAX`);
+
+      const txHash = await createProjectOnChain(
+        CONTRACT_ADDRESS,
+        preview.title,
+        preview.description,
+        String(avaxAmount), // ✅ Correct AVAX string, e.g. "0.5"
+        30
+      );
+
+      toast.loading("Waiting for confirmation...", { id: deployToast });
+
+      // Get receipt to parse event for project ID
+      const provider = new ethers.BrowserProvider(window.ethereum!);
+      const receipt = await provider.getTransactionReceipt(txHash);
+
+      let realOnChainId = Date.now(); // Fallback
+      if (receipt) {
+        const interface_ = new ethers.Interface(CONTRACT_ABI);
+        for (const log of receipt.logs) {
+          try {
+            const parsed = interface_.parseLog(log);
+            if (parsed && parsed.name === "ProjectCreated") {
+              realOnChainId = Number(parsed.args.id);
+              console.log("Parsed Project ID from logs:", realOnChainId);
+              break;
+            }
+          } catch (e) {
+            // Log might be from another event or contract
+          }
+        }
+      }
+
+      // Add to Supabase
+      await addEscrow({
         title: preview.title,
         description: preview.description,
         employer: address || "0xAddress",
-        worker: "", // No worker assigned yet - freelancer will apply via /jobs
-        totalAmount: preview.totalAmount,
+        worker: "",
+        totalAmount: String(avaxAmount),
         milestones: preview.milestones.map((m, idx) => ({
           ...m,
           id: m.id || idx + 1,
           status: m.status || "pending"
         })),
         status: "created",
-        contractAddress: contractAddr,
+        contractAddress: CONTRACT_ADDRESS,
+        onChainId: realOnChainId,
         team: preview.team,
         riskLevel: preview.riskLevel,
         duration: preview.duration,
-        techStack: (preview as any).techStack,
-        aiAuditResult: "" // Will be populated when freelancer submits and AI audits
+        techStack: (preview as any).techStack || [],
+        aiAuditResult: ""
       });
 
-      const deployMsg: Message = {
+      toast.success("Project live on Avalanche Fuji!", { id: deployToast });
+
+      setMessages((prev) => [...prev, {
         id: `deploy-${Date.now()}`,
         role: "system",
-        content: `**Deployment Successful!** 🚀\n\nTransaction Hash: [${txHash}](${ACTIVE_NETWORK.blockExplorerUrl}/tx/${txHash})\n\nYour project is now live with an automated, AI-audited escrow. Talent has been notified.`,
-      };
-      setMessages((prev) => [...prev, deployMsg]);
+        content: `**Project Created On-Chain!** 🚀\n\nProject ID: **#${realOnChainId}**\nBudget: **${avaxAmount} AVAX** (escrowed)\nTransaction: [View on Explorer](${ACTIVE_NETWORK.blockExplorerUrl}/tx/${txHash})\n\nTokens have been escrowed. Talent can now find your job in the Board.`,
+      }]);
     } catch (error: any) {
+      toast.error("Transaction failed: " + error.message, { id: deployToast });
       setMessages((prev) => [...prev, {
         id: `error-${Date.now()}`,
         role: "system",
-        content: `Deployment Failed: ${error.message || "Unknown error"}`
+        content: `Transaction Failed: ${error.message || "Unknown error"}`
       }]);
     } finally {
       setIsDeploying(false);
@@ -282,11 +383,11 @@ export function AIChat() {
       >
         {messages.map((msg) => (
           <div key={msg.id} className={`flex gap-4 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-            <div className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border ${msg.role === 'assistant' ? 'bg-white border-slate-200 text-emerald-600' : 'bg-slate-900 border-slate-900 text-white'}`}>
-              {msg.role === 'assistant' ? <Bot className="h-5 w-5" /> : <User className="h-5 w-5" />}
+            <div className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border ${msg.role === "assistant" ? "bg-white border-slate-200 text-emerald-600" : "bg-slate-900 border-slate-900 text-white"}`}>
+              {msg.role === "assistant" ? <Bot className="h-5 w-5" /> : <User className="h-5 w-5" />}
             </div>
             <div className={`flex flex-col gap-3 max-w-[80%] ${msg.role === "user" ? "items-end" : ""}`}>
-              <div className={`p-4 rounded-2xl text-sm leading-relaxed font-medium ${msg.role === 'user' ? 'bg-emerald-600 text-white rounded-tr-none' : 'bg-white border border-slate-100 text-slate-700 rounded-tl-none shadow-sm'}`}>
+              <div className={`p-4 rounded-2xl text-sm leading-relaxed font-medium ${msg.role === "user" ? "bg-emerald-600 text-white rounded-tr-none" : "bg-white border border-slate-100 text-slate-700 rounded-tl-none shadow-sm"}`}>
                 {msg.content}
               </div>
 
@@ -296,7 +397,8 @@ export function AIChat() {
                     <div className="flex items-center gap-2 font-black text-sm uppercase tracking-tight">
                       <ShieldCheck className="h-4 w-4" /> Team Proposal
                     </div>
-                    <span className="font-black text-base">${msg.escrowPreview.totalAmount}</span>
+                    {/* ✅ Show AVAX unit clearly */}
+                    <span className="font-black text-base">{msg.escrowPreview.totalAmount} AVAX</span>
                   </div>
                   <div className="p-6 space-y-6">
                     {msg.escrowPreview.team && (
@@ -309,18 +411,34 @@ export function AIChat() {
                                 <p className="text-xs font-black text-slate-800">{m.role}</p>
                                 <p className="text-[10px] text-slate-500 font-bold">{m.description}</p>
                               </div>
-                              <span className="text-xs font-black text-emerald-600">${m.budget}</span>
+                              {/* ✅ Show AVAX unit */}
+                              <span className="text-xs font-black text-emerald-600">{m.budget} AVAX</span>
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
+
+                    {/* ✅ Show amount warning if close to limit */}
+                    {parseFloat(msg.escrowPreview.totalAmount) > 5 && (
+                      <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                        <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                        <p className="text-xs text-amber-700 font-bold">
+                          Large budget detected. Make sure you have enough AVAX in your wallet.
+                        </p>
+                      </div>
+                    )}
+
                     <Button
                       onClick={() => handleDeploy(msg.escrowPreview!)}
                       disabled={isDeploying}
                       className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black shadow-lg shadow-emerald-500/20 transition-all"
                     >
-                      {isDeploying ? <Loader2 className="h-5 w-5 animate-spin" /> : "Confirm Selection"}
+                      {isDeploying ? (
+                        <><Loader2 className="h-5 w-5 animate-spin mr-2" /> Confirming...</>
+                      ) : (
+                        <>Confirm Selection · {msg.escrowPreview.totalAmount} AVAX</>
+                      )}
                     </Button>
                   </div>
                 </Card>
@@ -351,7 +469,7 @@ export function AIChat() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Describe your project (budget, goals, timeline)..."
+            placeholder="Describe your project (budget in AVAX, goals, timeline)..."
             disabled={isProcessing}
             className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-6 pr-14 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 transition-all"
           />

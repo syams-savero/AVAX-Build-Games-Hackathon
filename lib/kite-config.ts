@@ -50,6 +50,7 @@ export interface EscrowContract {
   milestones: Milestone[];
   status: EscrowStatus;
   createdAt: string;
+  onChainId?: number;
   contractAddress?: string;
   team?: TeamMember[];
   riskLevel?: "Low" | "Medium" | "High";

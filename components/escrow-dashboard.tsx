@@ -106,8 +106,19 @@ function EscrowCard({
   const { address } = useWallet();
 
   const handleMarkComplete = async (milestoneId: number) => {
-    await updateMilestoneStatus(escrow.id, milestoneId, "completed");
-    onUpdate();
+    try {
+      if (escrow.onChainId) {
+        toast.loading("Releasing payment on-chain...");
+        const { releasePaymentOnChain, CONTRACT_ADDRESS } = await import("@/lib/contract");
+        await releasePaymentOnChain(CONTRACT_ADDRESS, Number(escrow.onChainId));
+        toast.success("Payment released successfully!");
+      }
+
+      await updateMilestoneStatus(escrow.id, milestoneId, "completed");
+      onUpdate();
+    } catch (e: any) {
+      toast.error("Failed to release payment: " + e.message);
+    }
   };
 
   const handleAudit = async (milestoneId: number) => {
@@ -127,6 +138,15 @@ function EscrowCard({
           description: result.feedback,
           id: auditToast
         });
+
+        // 1. Submit work on-chain
+        if (escrow.onChainId) {
+          toast.loading("Submitting work to smart contract...", { id: auditToast });
+          const { submitWorkOnChain, CONTRACT_ADDRESS } = await import("@/lib/contract");
+          await submitWorkOnChain(CONTRACT_ADDRESS, Number(escrow.onChainId), githubUrl);
+        }
+
+        // 2. Update status in DB
         handleMarkComplete(milestoneId);
       } else {
         toast.error(`Audit Failed (${result.score}/100)`, {
@@ -135,7 +155,7 @@ function EscrowCard({
         });
       }
     } catch (e: any) {
-      toast.error("Audit failed", {
+      toast.error("Audit or submission failed", {
         description: e.message,
         id: auditToast
       });
