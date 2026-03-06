@@ -30,7 +30,7 @@ export async function createProjectOnChain(
 	description: string,
 	amountInAvax: string,
 	timeoutDays: number = 30
-): Promise<string> {
+): Promise<{ hash: string; onChainId: number }> {
 	const contract = await getContract();
 	const valueInWei = ethers.parseEther(amountInAvax);
 	const timeoutSeconds = timeoutDays * 24 * 60 * 60;
@@ -45,7 +45,22 @@ export async function createProjectOnChain(
 	const receipt = await tx.wait();
 	console.log("Transaction confirmed in block:", receipt.blockNumber);
 
-	return tx.hash;
+	// Parse logs to find ProjectCreated event
+	let onChainId = Date.now(); // Fallback
+	for (const log of receipt.logs) {
+		try {
+			const parsed = contract.interface.parseLog(log);
+			if (parsed && parsed.name === "ProjectCreated") {
+				onChainId = Number(parsed.args.id);
+				console.log("Found Project ID in logs:", onChainId);
+				break;
+			}
+		} catch (e) {
+			// Skip logs that can't be parsed by this contract's interface
+		}
+	}
+
+	return { hash: tx.hash, onChainId };
 }
 
 export async function releasePaymentOnChain(
@@ -70,6 +85,20 @@ export async function submitWorkOnChain(
 	console.log(`Submitting work for project ID: ${projectId}, URL: ${githubUrl}`);
 
 	const tx = await contract.submitWork(projectId, githubUrl);
+	await tx.wait();
+
+	return tx.hash;
+}
+
+export async function assignFreelancerOnChain(
+	contractAddress: string,
+	projectId: number,
+	freelancerAddress: string
+): Promise<string> {
+	const contract = await getContract();
+	console.log(`Assigning freelancer ${freelancerAddress} to project ID: ${projectId}`);
+
+	const tx = await contract.assignFreelancer(projectId, freelancerAddress);
 	await tx.wait();
 
 	return tx.hash;

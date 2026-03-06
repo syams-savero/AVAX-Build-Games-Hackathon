@@ -270,7 +270,7 @@ export function AIChat() {
 
       console.log(`Deploying project with budget: ${avaxAmount} AVAX`);
 
-      const txHash = await createProjectOnChain(
+      const { hash: txHash, onChainId: realOnChainId } = await createProjectOnChain(
         CONTRACT_ADDRESS,
         preview.title,
         preview.description,
@@ -278,28 +278,7 @@ export function AIChat() {
         30
       );
 
-      toast.loading("Waiting for confirmation...", { id: deployToast });
-
-      // Get receipt to parse event for project ID
-      const provider = new ethers.BrowserProvider(window.ethereum!);
-      const receipt = await provider.getTransactionReceipt(txHash);
-
-      let realOnChainId = Date.now(); // Fallback
-      if (receipt) {
-        const interface_ = new ethers.Interface(CONTRACT_ABI);
-        for (const log of receipt.logs) {
-          try {
-            const parsed = interface_.parseLog(log);
-            if (parsed && parsed.name === "ProjectCreated") {
-              realOnChainId = Number(parsed.args.id);
-              console.log("Parsed Project ID from logs:", realOnChainId);
-              break;
-            }
-          } catch (e) {
-            // Log might be from another event or contract
-          }
-        }
-      }
+      toast.loading("Database syncing...", { id: deployToast });
 
       // Add to Supabase
       await addEscrow({

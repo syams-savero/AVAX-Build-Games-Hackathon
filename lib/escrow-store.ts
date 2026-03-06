@@ -39,6 +39,10 @@ async function load() {
   }
 }
 
+export async function refreshEscrows() {
+  await load();
+}
+
 load();
 
 function notify() {
@@ -108,8 +112,12 @@ export async function addEscrow(escrow: Omit<EscrowContract, "id" | "createdAt">
     if (error.code === "23502") {
       console.error("⚠️ NOT NULL VIOLATION — A required column is missing or null.");
     }
+    if (error.code === "PGRST204") {
+      console.error("🔃 SCHEMA CACHE ERROR — Supabase doesn't see your new column yet.");
+      console.error("👉 Solution: Refresh your browser or wait 2-3 minutes for Supabase to sync.");
+    }
     if (error.code === "42703") {
-      console.error("⚠️ COLUMN NOT FOUND — A column in dbData doesn't exist in your table.");
+      console.error("⚠️ COLUMN NOT FOUND — The column 'on_chain_id' doesn't exist in your table.");
     }
   } else {
     console.log("EscrowStore: ✅ Insert successful!");
@@ -180,6 +188,53 @@ export async function assignWorker(escrowId: string, workerAddress: string) {
 
     if (error) console.error("Supabase worker assignment error:", error.message, error.hint);
   }
+}
+
+// Proposals management
+export async function submitProposal(data: {
+  escrowId: string;
+  freelancer: string;
+  content: string;
+  portfolioUrl: string;
+  aiScore: number;
+  aiFeedback: string;
+}) {
+  const proposal = {
+    id: `prop-${Date.now()}`,
+    escrow_id: data.escrowId,
+    freelancer: data.freelancer,
+    content: data.content,
+    portfolio_url: data.portfolioUrl,
+    ai_score: data.aiScore,
+    ai_feedback: data.aiFeedback,
+    status: 'pending'
+  };
+
+  const { error } = await supabase.from('proposals').insert([proposal]);
+  if (error) throw error;
+  notify();
+  return proposal;
+}
+
+export async function getProposalsForEscrow(escrowId: string) {
+  const { data, error } = await supabase
+    .from('proposals')
+    .select('*')
+    .eq('escrow_id', escrowId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateProposalStatus(proposalId: string, status: 'accepted' | 'rejected') {
+  const { error } = await supabase
+    .from('proposals')
+    .update({ status })
+    .eq('id', proposalId);
+
+  if (error) throw error;
+  notify();
 }
 
 export function subscribe(listener: () => void) {

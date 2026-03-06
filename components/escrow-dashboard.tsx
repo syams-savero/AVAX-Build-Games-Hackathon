@@ -6,6 +6,9 @@ import {
   getEscrows,
   updateMilestoneStatus,
   subscribe,
+  getProposalsForEscrow,
+  updateProposalStatus,
+  assignWorker,
 } from "@/lib/escrow-store";
 import {
   type EscrowContract,
@@ -103,7 +106,49 @@ function EscrowCard({
 
   const [githubUrl, setGithubUrl] = useState(escrow.githubUrl || "");
   const [isAuditing, setIsAuditing] = useState(false);
+  const [proposals, setProposals] = useState<any[]>([]);
+  const [isLoadingProposals, setIsLoadingProposals] = useState(false);
   const { address } = useWallet();
+
+  const loadProposals = useCallback(async () => {
+    if (escrow.status === 'created') {
+      setIsLoadingProposals(true);
+      try {
+        const data = await getProposalsForEscrow(escrow.id);
+        setProposals(data);
+      } catch (e) {
+        console.error("Failed to load proposals:", e);
+      } finally {
+        setIsLoadingProposals(false);
+      }
+    }
+  }, [escrow.id, escrow.status]);
+
+  useEffect(() => {
+    if (isExpanded) {
+      loadProposals();
+    }
+  }, [isExpanded, loadProposals]);
+
+  const handleHire = async (proposal: any) => {
+    const hireToast = toast.loading(`Hiring ${shortenAddress(proposal.freelancer)}...`);
+    try {
+      // 1. On-chain assignment
+      if (escrow.contractAddress && escrow.onChainId) {
+        const { assignFreelancerOnChain } = await import("@/lib/contract");
+        await assignFreelancerOnChain(escrow.contractAddress, Number(escrow.onChainId), proposal.freelancer);
+      }
+
+      // 2. DB Update
+      await assignWorker(escrow.id, proposal.freelancer);
+      await updateProposalStatus(proposal.id, 'accepted');
+
+      toast.success("Freelancer hired and assigned on-chain!", { id: hireToast });
+      onUpdate();
+    } catch (e: any) {
+      toast.error("Hiring failed: " + e.message, { id: hireToast });
+    }
+  };
 
   const handleMarkComplete = async (milestoneId: number) => {
     try {
@@ -147,7 +192,14 @@ function EscrowCard({
         }
 
         // 2. Update status in DB
-        handleMarkComplete(milestoneId);
+        const { supabase } = await import("@/lib/supabase");
+        await supabase.from('escrows').update({
+          github_url: githubUrl,
+          ai_audit_result: `${result.score}% - ${result.status}: ${result.feedback.substring(0, 100)}...`
+        }).eq('id', escrow.id);
+
+        toast.success("Work submitted and verified by AI!", { id: auditToast });
+        onUpdate();
       } else {
         toast.error(`Audit Failed (${result.score}/100)`, {
           description: result.feedback,
@@ -223,15 +275,20 @@ function EscrowCard({
           {escrow.contractAddress && (
             <div className="flex flex-col">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">On-Chain</span>
-              <a
-                href={`${ACTIVE_NETWORK.blockExplorerUrl}/tx/${escrow.contractAddress}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:underline"
-              >
-                {shortenAddress(escrow.contractAddress)}
-                <ExternalLink className="h-3 w-3" />
-              </a>
+              <div className="flex flex-col gap-1">
+                <a
+                  href={`${ACTIVE_NETWORK.blockExplorerUrl}/tx/${escrow.contractAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs font-bold text-emerald-600 hover:underline"
+                >
+                  {shortenAddress(escrow.contractAddress)}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+                {!escrow.onChainId && (
+                  <span className="text-[9px] font-black text-amber-500 uppercase">⚠️ STUCK / NO CHAIN ID</span>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -260,7 +317,53 @@ function EscrowCard({
       </div>
 
       {isExpanded && (
-        <div className="border-t border-slate-100 bg-slate-50/50 p-6 space-y-8 animate-in slide-in-from-top-2 duration-300">
+        <div className="border-t border-slate-100 bg-white p-6 space-y-8 animate-in slide-in-from-top-2 duration-300 shadow-inner">
+          {/* Proposals for Employer */}
+          {isEmployer && escrow.status === 'created' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-800 flex items-center gap-2">
+                  <Users className="h-3.5 w-3.5 text-blue-600" />
+                  Received Proposals ({proposals.length})
+                </h4>
+                {isLoadingProposals && <Loader2 className="h-3 w-3 animate-spin text-slate-400" />}
+              </div>
+
+              {proposals.length === 0 ? (
+                <div className="text-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No proposals yet. AI Agent is still sourcing...</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {proposals.map((prop) => (
+                    <div key={prop.id} className="group relative bg-white border border-slate-100 p-5 rounded-2xl hover:border-emerald-200 transition-all shadow-sm hover:shadow-md">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] font-black text-slate-900 border-b border-slate-200">{shortenAddress(prop.freelancer)}</span>
+                            <Badge className="bg-emerald-600 text-white border-none font-black text-[9px] h-5">AI SCORE: {prop.ai_score}/100</Badge>
+                          </div>
+                          <p className="text-xs text-slate-600 font-medium leading-relaxed italic">"{prop.content}"</p>
+                          {prop.portfolio_url && (
+                            <a href={prop.portfolio_url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[9px] font-black text-blue-600 hover:underline">
+                              <ExternalLink className="h-2.5 w-2.5" /> VIEW PORTFOLIO
+                            </a>
+                          )}
+                        </div>
+                        <Button
+                          onClick={() => handleHire(prop)}
+                          className="bg-slate-900 hover:bg-emerald-600 text-white font-black text-[10px] uppercase h-10 px-6 rounded-xl"
+                        >
+                          Hire Now
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Team Info */}
           {escrow.team && (
             <div className="space-y-4">
@@ -282,15 +385,23 @@ function EscrowCard({
 
           {/* AI Audit Result */}
           {escrow.aiAuditResult && (
-            <div className="p-4 bg-emerald-600 text-white rounded-xl flex items-center justify-between shadow-lg shadow-emerald-600/10">
-              <div className="flex items-center gap-3">
-                <ShieldCheck className="h-5 w-5" />
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">AI Security Scan</p>
-                  <p className="text-sm font-bold">{escrow.aiAuditResult}</p>
+            <div className={`p-5 rounded-2xl flex flex-col gap-3 shadow-lg ${escrow.aiAuditResult.includes('PASS') ? 'bg-emerald-600 text-white' : 'bg-red-50 text-red-700 border border-red-100'
+              }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <ShieldCheck className="h-5 w-5" />
+                  <p className="text-[10px] font-black uppercase tracking-wider">AI Security Auditor Analysis</p>
                 </div>
+                <Badge className={escrow.aiAuditResult.includes('PASS') ? "bg-white/20 text-white" : "bg-red-200 text-red-700"}>
+                  {escrow.aiAuditResult.includes('PASS') ? 'VERIFIED' : 'REJECTED'}
+                </Badge>
               </div>
-              <Badge variant="secondary" className="bg-white/20 border-none text-white font-bold h-6">Verified</Badge>
+              <p className="text-sm font-bold leading-relaxed">{escrow.aiAuditResult}</p>
+              {escrow.githubUrl && (
+                <a href={escrow.githubUrl} target="_blank" rel="noreferrer" className="text-[10px] font-black underline flex items-center gap-1">
+                  <ExternalLink className="h-3 w-3" /> REVIEW SUBMITTED CODE
+                </a>
+              )}
             </div>
           )}
 

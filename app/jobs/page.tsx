@@ -16,10 +16,80 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { motion } from "framer-motion";
-import { getEscrows, subscribe, assignWorker } from "@/lib/escrow-store";
+import { getEscrows, subscribe, assignWorker, submitProposal } from "@/lib/escrow-store";
 import { formatKite, ACTIVE_NETWORK } from "@/lib/kite-config";
 import { useWallet } from "@/lib/wallet-context";
+import { auditProposal } from "@/lib/ai";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+
+interface ProposalModalProps {
+    job: any;
+    onClose: () => void;
+    onSubmit: (content: string, portfolio: string) => void;
+    isSubmitting: boolean;
+}
+
+function ProposalModal({ job, onClose, onSubmit, isSubmitting }: ProposalModalProps) {
+    const [content, setContent] = useState("");
+    const [portfolio, setPortfolio] = useState("");
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+            <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden"
+            >
+                <div className="bg-emerald-600 p-8 text-white">
+                    <h3 className="text-2xl font-black uppercase tracking-tight">Submit Proposal</h3>
+                    <p className="text-emerald-100 text-sm mt-1 font-medium italic">Pitch yourself to the AI Agent and Employer</p>
+                </div>
+                <div className="p-8 space-y-6">
+                    <div className="space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cover Letter</label>
+                            <Textarea
+                                placeholder="Why are you the best fit for this project? Mention your experience..."
+                                className="min-h-[120px] rounded-2xl bg-slate-50 border-slate-200 focus:ring-emerald-500/10"
+                                value={content}
+                                onChange={(e) => setContent(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Portfolio / GitHub URL</label>
+                            <Input
+                                placeholder="https://github.com/your-repo"
+                                className="h-12 rounded-2xl bg-slate-50 border-slate-200 focus:ring-emerald-500/10"
+                                value={portfolio}
+                                onChange={(e) => setPortfolio(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                        <Button
+                            variant="ghost"
+                            onClick={onClose}
+                            className="flex-1 h-12 rounded-xl font-bold text-slate-500"
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={() => onSubmit(content, portfolio)}
+                            disabled={!content || !portfolio || isSubmitting}
+                            className="flex-1 h-12 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white font-black uppercase tracking-widest text-xs"
+                        >
+                            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send Proposal"}
+                        </Button>
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    );
+}
 
 export default function FindJobsPage() {
     const { isConnected, address, connect } = useWallet();
@@ -43,7 +113,7 @@ export default function FindJobsPage() {
     }, [escrows, address]);
 
     const [isScreening, setIsScreening] = useState<string | null>(null);
-    const [screeningResult, setScreeningResult] = useState<{ id: string, score: number, comment: string } | null>(null);
+    const [selectedJob, setSelectedJob] = useState<any | null>(null);
 
     const handleApply = async (jobId: string) => {
         if (!isConnected) {
@@ -51,32 +121,48 @@ export default function FindJobsPage() {
             return;
         }
 
-        // SECURITY: Prevent employer from applying to their own project (self-hire attack)
         const job = escrows.find(e => e.id === jobId);
         if (job && address && job.employer?.toLowerCase() === address.toLowerCase()) {
-            alert("You cannot apply to your own project.");
+            toast.error("You cannot apply to your own project.");
             return;
         }
 
-        setIsScreening(jobId);
-        // AI Screening Logic
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-        const score = Math.floor(Math.random() * 20) + 80; // 80-100
-        setScreeningResult({
-            id: jobId,
-            score,
-            comment: `AI Analysis: GitHub profile strong in ${escrows.find(e => e.id === jobId)?.techStack?.join(", ") || "Web3"}. On-chain reputation: High.`
-        });
+        setSelectedJob(job);
     };
 
-    const handleConfirmSelection = async (jobId: string) => {
-        if (address) {
-            await assignWorker(jobId, address);
+    const submitProposalFlow = async (content: string, portfolio: string) => {
+        if (!selectedJob || !address) return;
+
+        setIsScreening(selectedJob.id);
+        const proposalToast = toast.loading("AI Agent is vetting your proposal...");
+
+        try {
+            // 1. AI Screening
+            const result = await auditProposal(content, portfolio, selectedJob.description);
+
+            // 2. Save to Supabase
+            await submitProposal({
+                escrowId: selectedJob.id,
+                freelancer: address,
+                content,
+                portfolioUrl: portfolio,
+                aiScore: result.score,
+                aiFeedback: result.feedback
+            });
+
+            toast.success("Proposal Sent!", {
+                description: `AI Match Score: ${result.score}% - ${result.feedback}`,
+                id: proposalToast
+            });
+
+            setSelectedJob(null);
+        } catch (e: any) {
+            toast.error("Failed to submit: " + e.message, { id: proposalToast });
+        } finally {
             setIsScreening(null);
-            setScreeningResult(null);
         }
     };
+
 
     const filteredJobs = useMemo(() => {
         return escrows.filter(job =>
@@ -199,36 +285,20 @@ export default function FindJobsPage() {
                                     </div>
                                 </div>
 
-                                {screeningResult?.id === job.id && (
-                                    <motion.div
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: "auto", opacity: 1 }}
-                                        className="mt-8 pt-8 border-t border-slate-100"
-                                    >
-                                        <div className="bg-emerald-50 border border-emerald-100 rounded-3xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
-                                            <div className="flex items-center gap-4">
-                                                <div className="h-12 w-12 rounded-2xl bg-white border border-emerald-200 flex items-center justify-center text-emerald-600 font-black shadow-sm">
-                                                    {screeningResult?.score}%
-                                                </div>
-                                                <div>
-                                                    <h4 className="font-black text-slate-900 text-sm uppercase italic">AI Match Result</h4>
-                                                    <p className="text-xs text-slate-500 font-medium">{screeningResult?.comment}</p>
-                                                </div>
-                                            </div>
-                                            <Button
-                                                onClick={() => handleConfirmSelection(job.id)}
-                                                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-8 rounded-xl h-11 shadow-lg shadow-emerald-500/20"
-                                            >
-                                                Confirm Assignment
-                                            </Button>
-                                        </div>
-                                    </motion.div>
-                                )}
                             </motion.div>
                         ))}
                     </div>
                 </div>
             </main>
+
+            {selectedJob && (
+                <ProposalModal
+                    job={selectedJob}
+                    onClose={() => setSelectedJob(null)}
+                    onSubmit={submitProposalFlow}
+                    isSubmitting={!!isScreening}
+                />
+            )}
         </div>
     );
 }

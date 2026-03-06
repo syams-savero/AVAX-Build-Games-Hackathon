@@ -169,3 +169,44 @@ export async function auditCode(githubUrl: string, projectRequirements: string) 
     };
   }
 }
+
+export async function auditProposal(
+  proposalContent: string,
+  portfolioUrl: string,
+  projectRequirements: string
+) {
+  const proposalPrompt = `
+    You are an AI Professional Recruiter.
+    Evaluate the following freelancer proposal for a project with these requirements:
+    "${projectRequirements}"
+
+    Freelancer Proposal:
+    "${proposalContent}"
+
+    Portfolio URL: "${portfolioUrl}"
+
+    Evaluate based on:
+    1. Relevance of skills and experience.
+    2. Professionalism and clarity.
+    3. Proof of past work.
+
+    Return your evaluation in valid JSON format:
+    {
+      "score": 0-100,
+      "feedback": "Concise professional feedback",
+      "decision": "RECOMMEND" | "CAUTION" | "REJECT"
+    }
+  `;
+
+  try {
+    const response = await chatWithAI([{ role: "assistant", content: "I am ready to evaluate the proposal." }, { role: "user", content: proposalPrompt }]);
+    const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || response.match(/\{[\s\S]*?\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[1] || jsonMatch[0]);
+    }
+    return { score: 50, feedback: "AI evaluation unavailable. Manual review recommended.", decision: "CAUTION" };
+  } catch (e) {
+    console.error("Proposal audit error:", e);
+    return { score: 0, feedback: "AI Agent Error during screening.", decision: "REJECT" };
+  }
+}
