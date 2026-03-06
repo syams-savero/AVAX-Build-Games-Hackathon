@@ -17,7 +17,6 @@ import {
   shortenAddress,
   ACTIVE_NETWORK
 } from "@/lib/kite-config";
-import { auditCode } from "@/lib/ai";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -167,45 +166,50 @@ function EscrowCard({
   };
 
   const handleAudit = async (milestoneId: number) => {
-    if (!githubUrl) {
-      toast.error("Please provide a GitHub URL for auditing.");
+    if (!githubUrl || !address) {
+      toast.error("Please provide a valid GitHub URL and ensure your wallet is connected.");
       return;
     }
 
     setIsAuditing(true);
-    const auditToast = toast.loading("AI Agent is fetching and auditing your code...");
+    const auditToast = toast.loading("AI Agent is fetching and auditing your code securely on the backend...");
 
     try {
-      const result = await auditCode(githubUrl, escrow.description);
+      // 1. Submit work on-chain FIRST
+      if (escrow.onChainId && escrow.contractAddress) {
+        toast.loading("Submitting work to smart contract...", { id: auditToast });
+        const { submitWorkOnChain, CONTRACT_ADDRESS } = await import("@/lib/contract");
+        await submitWorkOnChain(CONTRACT_ADDRESS, Number(escrow.onChainId), githubUrl);
+        toast.loading("On-chain submission verified! Running AI Audit...", { id: auditToast });
+      } else {
+        throw new Error("Missing On-Chain ID. Please contact support.");
+      }
 
+      // 2. Call Secure Server Action
+      const { submitAndAuditWork } = await import("@/app/actions/audit");
+      const response = await submitAndAuditWork(escrow.id, githubUrl, address);
+
+      if (!response.success || !response.result) {
+        throw new Error(response.error || "Unknown Server Error");
+      }
+
+      const { result } = response;
+
+      // 3. Mark milestone complete ONLY IF pass. But URL is now saved regardless by backend.
       if (result.status === "PASS" && result.score >= 70) {
         toast.success(`Audit Passed (${result.score}/100)`, {
           description: result.feedback,
           id: auditToast
         });
-
-        // 1. Submit work on-chain
-        if (escrow.onChainId) {
-          toast.loading("Submitting work to smart contract...", { id: auditToast });
-          const { submitWorkOnChain, CONTRACT_ADDRESS } = await import("@/lib/contract");
-          await submitWorkOnChain(CONTRACT_ADDRESS, Number(escrow.onChainId), githubUrl);
-        }
-
-        // 2. Update status in DB
-        const { supabase } = await import("@/lib/supabase");
-        await supabase.from('escrows').update({
-          github_url: githubUrl,
-          ai_audit_result: `${result.score}% - ${result.status}: ${result.feedback.substring(0, 100)}...`
-        }).eq('id', escrow.id);
-
-        toast.success("Work submitted and verified by AI!", { id: auditToast });
-        onUpdate();
+        await updateMilestoneStatus(escrow.id, milestoneId, "completed");
       } else {
         toast.error(`Audit Failed (${result.score}/100)`, {
-          description: result.feedback,
+          description: "Your submission has been saved, but AI returned a low score. The Employer will review it.",
           id: auditToast
         });
       }
+
+      onUpdate();
     } catch (e: any) {
       toast.error("Audit or submission failed", {
         description: e.message,
@@ -476,14 +480,25 @@ function EscrowCard({
                           </div>
                         )}
                         {isEmployer && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleMarkComplete(milestone.id)}
-                            disabled={isAuditing}
-                            className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 font-bold"
-                          >
-                            Release
-                          </Button>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleMarkComplete(milestone.id)}
+                              disabled={isAuditing}
+                              className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 font-bold"
+                            >
+                              Release
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleMarkComplete(milestone.id)}
+                              disabled={isAuditing}
+                              className="h-9 text-[10px] font-black tracking-widest uppercase bg-red-100/50 text-red-600 hover:bg-red-600 hover:text-white border-none"
+                            >
+                              Force Release (Dispute Override)
+                            </Button>
+                          </div>
                         )}
                       </div>
                     )}

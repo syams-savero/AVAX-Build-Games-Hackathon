@@ -102,66 +102,6 @@ export function AIChat() {
     return DEFAULT_AVAX_AMOUNT;
   };
 
-  const generateTeamAndEscrow = (userInput: string): EscrowPreview => {
-    // ✅ FIX: Parse AVAX amount properly (not USD string)
-    const totalAmountAvax = parseFloat(parseAvaxAmount(userInput));
-
-    const isHighBudget = totalAmountAvax >= 1; // >= 1 AVAX = high budget
-
-    const team: TeamMember[] = isHighBudget ? [
-      {
-        role: "Lead Developer",
-        description: "Architecture & Smart Contracts",
-        budget: String((totalAmountAvax * 0.5).toFixed(4))
-      },
-      {
-        role: "Security Auditor",
-        description: "Independent Bug Hunting",
-        budget: String((totalAmountAvax * 0.3).toFixed(4))
-      },
-      {
-        role: "UI Engineer",
-        description: "Frontend Integration",
-        budget: String((totalAmountAvax * 0.2).toFixed(4))
-      }
-    ] : [];
-
-    const milestones: Milestone[] = [
-      {
-        id: 1,
-        title: "Drafting & Security Audit",
-        description: "Initial smart contract draft and audit verification.",
-        amount: String((totalAmountAvax * 0.3).toFixed(4)),
-        status: "pending",
-        earlyBonus: "5%"
-      },
-      {
-        id: 2,
-        title: "Core Development",
-        description: "Main feature implementation and on-chain logic.",
-        amount: String((totalAmountAvax * 0.5).toFixed(4)),
-        status: "pending",
-        earlyBonus: "10%"
-      },
-      {
-        id: 3,
-        title: "Final Audit & Release",
-        description: "Final verification and mainnet deployment.",
-        amount: String((totalAmountAvax * 0.2).toFixed(4)),
-        status: "pending"
-      }
-    ];
-
-    return {
-      title: "Custom AI-Vetted Project",
-      description: userInput,
-      totalAmount: String(totalAmountAvax), // ✅ Always AVAX, e.g. "0.5"
-      milestones,
-      team: team.length > 0 ? team : undefined,
-      riskLevel: totalAmountAvax > 5 ? "Medium" : "Low",
-      duration: totalAmountAvax > 1 ? "4 Weeks" : "1 Week"
-    };
-  };
 
   const handleMagicDemo = async (userInput: string) => {
     setIsProcessing(true);
@@ -185,35 +125,23 @@ export function AIChat() {
       };
 
       // Check for JSON action at the end
-      const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/);
+      const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || response.match(/\{[\s\S]*"action"\s*:\s*"DEPLOY_CONTRACT"[\s\S]*\}/);
       if (jsonMatch) {
         try {
-          const actionData = JSON.parse(jsonMatch[1]);
+          const rawJson = jsonMatch[1] || jsonMatch[0];
+          const actionData = JSON.parse(rawJson);
           if (actionData.action === "DEPLOY_CONTRACT") {
             // ✅ Re-parse totalAmount to make sure it's valid AVAX
             const rawPreview = actionData.data as EscrowPreview;
-            const safeAmount = parseFloat(parseAvaxAmount(userInput));
             newMsg.escrowPreview = {
               ...rawPreview,
-              totalAmount: String(safeAmount),
+              totalAmount: String(parseFloat(rawPreview.totalAmount || "0.1") || 0.1),
             };
             setChatState("READY");
           }
         } catch (e) {
           console.error("Failed to parse AI action JSON", e);
-          // Fallback: generate escrow from user input directly
-          newMsg.escrowPreview = generateTeamAndEscrow(userInput);
-          setChatState("READY");
-        }
-      } else {
-        // If AI didn't return JSON but user seems ready to deploy,
-        // auto-generate an escrow preview
-        const lower = userInput.toLowerCase();
-        const hasAvax = lower.includes("avax");
-        const hasProject = lower.length > 20;
-        if (hasAvax && hasProject) {
-          newMsg.escrowPreview = generateTeamAndEscrow(userInput);
-          setChatState("READY");
+          newMsg.content += "\n\n*(Error parsing deployment configuration)*";
         }
       }
 
@@ -287,7 +215,7 @@ export function AIChat() {
         employer: address || "0xAddress",
         worker: "",
         totalAmount: String(avaxAmount),
-        milestones: preview.milestones.map((m, idx) => ({
+        milestones: (preview.milestones || []).map((m, idx) => ({
           ...m,
           id: m.id || idx + 1,
           status: m.status || "pending"
@@ -371,57 +299,92 @@ export function AIChat() {
               </div>
 
               {msg.escrowPreview && (
-                <Card className="border-emerald-200/50 bg-white overflow-hidden shadow-xl rounded-3xl mt-2">
-                  <div className="bg-emerald-600 p-4 text-white flex items-center justify-between">
-                    <div className="flex items-center gap-2 font-black text-sm uppercase tracking-tight">
-                      <ShieldCheck className="h-4 w-4" /> Team Proposal
-                    </div>
-                    {/* ✅ Show AVAX unit clearly */}
-                    <span className="font-black text-base">{msg.escrowPreview.totalAmount} AVAX</span>
+                <Card className="border-slate-200 bg-white shadow-xl rounded-2xl w-[360px] md:w-[400px] mt-2 font-mono text-sm overflow-hidden border">
+                  <div className="border-b border-dashed border-slate-300 p-6 flex flex-col items-center justify-center bg-slate-50">
+                    <ShieldCheck className="h-8 w-8 text-slate-800 mb-2" />
+                    <h3 className="font-bold text-slate-900 tracking-widest uppercase">SMART CONTRACT</h3>
+                    <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-1">RECEIPT / NOTA</p>
                   </div>
-                  <div className="p-6 space-y-6">
-                    {msg.escrowPreview.team && (
-                      <div className="space-y-3">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Expert Assembly</h4>
+
+                  <div className="p-6 space-y-3">
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="text-slate-500 min-w-[80px]">PROJECT:</span>
+                      <span className="text-slate-900 font-medium text-right">{msg.escrowPreview.title}</span>
+                    </div>
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="text-slate-500 min-w-[80px]">DESC:</span>
+                      <span className="text-slate-900 text-[11px] text-right opacity-80 line-clamp-2 md:line-clamp-3 leading-relaxed mt-0.5">{msg.escrowPreview.description}</span>
+                    </div>
+                    <div className="flex justify-between items-start gap-4">
+                      <span className="text-slate-500 min-w-[80px]">DURATION:</span>
+                      <span className="text-slate-900 font-medium text-right uppercase">{msg.escrowPreview.duration || "TBD"}</span>
+                    </div>
+
+                    {(msg.escrowPreview.team && msg.escrowPreview.team.length > 0) && (
+                      <>
+                        <div className="border-t border-dashed border-slate-300 my-4" />
+                        <div className="text-slate-400 text-[10px] tracking-widest mb-2 uppercase">Team / Resources</div>
                         <div className="space-y-2">
                           {msg.escrowPreview.team.map((m, i) => (
-                            <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100 shadow-sm">
-                              <div>
-                                <p className="text-xs font-black text-slate-800">{m.role}</p>
-                                <p className="text-[10px] text-slate-500 font-bold">{m.description}</p>
-                              </div>
-                              {/* ✅ Show AVAX unit */}
-                              <span className="text-xs font-black text-emerald-600">{m.budget} AVAX</span>
+                            <div key={i} className="flex justify-between items-start gap-4 text-xs">
+                              <span className="text-slate-700">{i + 1}. {m.role}</span>
+                              <span className="text-slate-900 font-bold">{m.budget} AVAX</span>
                             </div>
                           ))}
                         </div>
-                      </div>
+                      </>
                     )}
 
-                    {/* ✅ Show amount warning if close to limit */}
+                    {(!msg.escrowPreview.team && msg.escrowPreview.milestones && msg.escrowPreview.milestones.length > 0) && (
+                      <>
+                        <div className="border-t border-dashed border-slate-300 my-4" />
+                        <div className="text-slate-400 text-[10px] tracking-widest mb-2 uppercase">Milestones</div>
+                        <div className="space-y-2">
+                          {msg.escrowPreview.milestones.map((m, i) => (
+                            <div key={i} className="flex justify-between items-start gap-4 text-xs">
+                              <span className="text-slate-700 line-clamp-1 flex-1">{i + 1}. {m.title}</span>
+                              <span className="text-slate-900 font-bold">{m.amount} AVAX</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
                     {parseFloat(msg.escrowPreview.totalAmount) > 5 && (
-                      <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
-                        <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
-                        <p className="text-xs text-amber-700 font-bold">
-                          Large budget detected. Make sure you have enough AVAX in your wallet.
-                        </p>
-                      </div>
+                      <>
+                        <div className="border-t border-dashed border-slate-300 my-4" />
+                        <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200">
+                          <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                          <p className="text-[10px] text-amber-700 font-bold leading-tight">
+                            Large budget detected. Make sure you have enough AVAX.
+                          </p>
+                        </div>
+                      </>
                     )}
 
+                    <div className="border-t border-dashed border-slate-300 my-4" />
+                    <div className="flex justify-between items-end gap-4 pt-1">
+                      <span className="text-slate-500 uppercase tracking-widest text-xs">TOTAL DUE</span>
+                      <span className="text-slate-900 font-black text-xl">{msg.escrowPreview.totalAmount} AVAX</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 border-t border-slate-100">
                     <Button
                       onClick={() => handleDeploy(msg.escrowPreview!)}
                       disabled={isDeploying}
-                      className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black shadow-lg shadow-emerald-500/20 transition-all"
+                      className="w-full h-12 bg-slate-900 hover:bg-emerald-600 text-white rounded-xl font-bold uppercase tracking-widest transition-all"
                     >
                       {isDeploying ? (
-                        <><Loader2 className="h-5 w-5 animate-spin mr-2" /> Confirming...</>
+                        <><Loader2 className="h-4 w-4 animate-spin mr-2" /> PROCESSING...</>
                       ) : (
-                        <>Confirm Selection · {msg.escrowPreview.totalAmount} AVAX</>
+                        <>SIGN & AUTHORIZE</>
                       )}
                     </Button>
                   </div>
                 </Card>
               )}
+
             </div>
           </div>
         ))}

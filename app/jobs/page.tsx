@@ -150,8 +150,8 @@ export default function FindJobsPage() {
                 aiFeedback: result.feedback
             });
 
-            toast.success("Proposal Sent!", {
-                description: `AI Match Score: ${result.score}% - ${result.feedback}`,
+            toast.success("Berhasil mengirim lamaran!", {
+                description: `Skor Kecocokan AI: ${result.score}% - ${result.feedback}`,
                 id: proposalToast
             });
 
