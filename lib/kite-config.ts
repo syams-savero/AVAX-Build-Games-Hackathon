@@ -29,9 +29,10 @@ export interface Milestone {
   title: string;
   description: string;
   amount: string;
-  status: "pending" | "in_progress" | "completed" | "disputed";
+  status: "pending" | "in_progress" | "completed" | "disputed" | "submitted"; // ✅ tambah "submitted"
   deadline?: string;
   earlyBonus?: string;
+  githubUrl?: string; // ✅ tambah untuk simpan link submission per-milestone
 }
 
 export interface TeamMember {
@@ -86,4 +87,4 @@ export const AVALANCHE_FUJI = {
 
 // Ganti ini untuk switch network
 export const ACTIVE_NETWORK = AVALANCHE_FUJI
-// export const ACTIVE_NETWORK = KITE_TESTNET 
+// export const ACTIVE_NETWORK = KITE_TESTNET
