@@ -13,15 +13,15 @@
 ### AI-Powered Freelance Escrow Platform on Avalanche
 
 [![Live Demo](https://img.shields.io/badge/🌐_Live_Demo-chainlancer.vercel.app-black?style=for-the-badge)](https://chainlancer.vercel.app)
-[![Smart Contract](https://img.shields.io/badge/📄_Contract-Fuji_Testnet-E84142?style=for-the-badge)](https://testnet.snowtrace.io/address/[CONTRACT_ADDRESS])
-[![Video Demo](https://img.shields.io/badge/▶️_Watch_Demo-YouTube-FF0000?style=for-the-badge)](https://youtu.be/[VIDEO_ID])
-[![GitHub](https://img.shields.io/badge/⭐_Star_on-GitHub-181717?style=for-the-badge)](https://github.com/[USERNAME]/chainlancer)
+[![Smart Contract](https://img.shields.io/badge/📄_Contract-Fuji_Testnet-E84142?style=for-the-badge)](https://testnet.snowtrace.io/address/0x7C253082f315744096eE262ed74fAc851e31DE28)
+[![Video Demo](https://img.shields.io/badge/▶️_Watch_Demo-YouTube-FF0000?style=for-the-badge)](https://youtu.be/TbH-7S6BuEs)
+[![GitHub](https://img.shields.io/badge/⭐_Star_on-GitHub-181717?style=for-the-badge)](https://github.com/syams-savero/AVAX-Build-Games-Hackathon)
 
 </div>
 
 ---
 
-## 🚨 The Problem
+## The Problem
 
 | Platform | Fee | Payment | Review |
 |----------|-----|---------|--------|
@@ -33,7 +33,7 @@
 
 ---
 
-## ⚡ The Solution
+## The Solution
 
 **ChainLancer** combines AI agents with smart contract escrow to eliminate the middleman entirely.
 
@@ -41,33 +41,33 @@
 Client types a prompt → AI defines project → Smart contract locks funds
      → Freelancers apply → AI screens candidates
           → Freelancer submits GitHub → AI reviews code
-               → APPROVED → Payment releases automatically
+               → APPROVED → Payment releases
 ```
 
 **No manual intervention. No middleman. No 20% fees.**
 
 ---
 
-## 🎬 Demo
+## Demo
 
 <div align="center">
 
-[![Demo Video](https://img.shields.io/badge/▶️_Watch_Full_Demo_(5_mins)-FF0000?style=for-the-badge&logo=youtube)](https://youtu.be/[VIDEO_ID])
+[![Demo Video](https://img.shields.io/badge/▶️_Watch_Full_Demo_(5_mins)-FF0000?style=for-the-badge&logo=youtube)](https://youtu.be/TbH-7S6BuEs)
 
 </div>
 
 ### Demo Flow
-1. 🤖 Client chats with AI → defines project requirements
-2. 📄 Smart contract auto-deployed → funds locked in escrow  
-3. 👀 Job posted publicly → freelancers apply
-4. 🔍 AI screens all applicants automatically
-5. 💻 Freelancer submits GitHub repository
-6. ✅ AI reviews code → payment releases if approved
-7. 🎉 Freelancer paid instantly, on-chain
+1. Client chats with AI → defines project requirements
+2. Smart contract auto-deployed → funds locked in escrow  
+3. Job posted publicly → freelancers apply
+4. AI screens all applicants automatically
+5. Freelancer submits GitHub repository
+6. AI reviews code → payment releases if approved
+7. Freelancer paid instantly, on-chain
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -98,7 +98,7 @@ Client types a prompt → AI defines project → Smart contract locks funds
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
@@ -111,11 +111,11 @@ Client types a prompt → AI defines project → Smart contract locks funds
 
 ---
 
-## 📄 Smart Contract
+## Smart Contract
 
 > **Network:** Avalanche Fuji Testnet  
-> **Address:** `[CONTRACT_ADDRESS]`  
-> **Explorer:** [View on Snowtrace ↗](https://testnet.snowtrace.io/address/[CONTRACT_ADDRESS])
+> **Address:** `0x7C253082f315744096eE262ed74fAc851e31DE28`  
+> **Explorer:** [View on Snowtrace ↗](https://testnet.snowtrace.io/address/0x7C253082f315744096eE262ed74fAc851e31DE28)
 
 ### Contract Functions
 
@@ -129,12 +129,12 @@ cancelProject(projectId)                     // Refund if cancelled
 
 ---
 
-## 🚀 How to Run Locally
+## How to Run Locally
 
 ```bash
 # Clone the repository
-git clone https://github.com/[USERNAME]/chainlancer
-cd chainlancer
+git clone https://github.com/syams-savero/AVAX-Build-Games-Hackathon
+cd AVAX-Build-Games-Hackathon
 
 # Install dependencies
 npm install
@@ -158,56 +158,21 @@ NEXT_PUBLIC_CHAIN_ID=43113           # Avalanche Fuji
 
 ---
 
-## 📋 MoSCoW Analysis
 
-### ✅ Must Have (Implemented)
-- AI conversational agent for project intake
-- Smart contract escrow on Avalanche
-- Automated code review via GitHub API + Groq
-- Payment auto-release on AI approval
-- Public job board
-
-### 🔜 Should Have (Next Sprint)
-- Account abstraction — email login for non-Web3 users
-- USDC stablecoin payments instead of AVAX
-- Dispute resolution mechanism
-
-### 💡 Could Have (Future)
-- Multi-milestone payment splits
-- On-chain reputation system
-- Mobile app
-
-### ❌ Won't Have (Out of Scope)
-- Fiat on/off ramp
-- Non-coding job types (design, writing)
-- Full KYC system
-
----
-
-## 🗺️ Roadmap
-
-```
-Phase 1 (Now)     → MVP: AI + Escrow for coding projects
-Phase 2 (Q2 2026) → Account abstraction, USDC, Kite AI integration  
-Phase 3 (Q3 2026) → Multi-chain, reputation system, mobile app
-Phase 4 (Q4 2026) → Mainnet launch, DAO governance
-```
-
----
-
-## 👥 Team
+## Team
 
 | Role | Contribution |
 |------|-------------|
 | **Muhammad Syams Savero** | Backend, Smart Contract, AI Integration |
-| **[Nama Teman]** | Frontend, UI/UX Design |
+| **Aji Saputra** | Fullstack |
+| **Ashari Dzaky** | UI / UX |
 
 ---
 
-## 🏆 Built for Avalanche Build Games 2026
+## Built for Avalanche Build Games 2026
 
 <div align="center">
 
-Built with ❤️ on Avalanche — *trustless, automated, unstoppable.*
+Built with ❤️ on Avalanche
 
 </div>
