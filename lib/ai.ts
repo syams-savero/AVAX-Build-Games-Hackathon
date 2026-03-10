@@ -16,7 +16,6 @@ export async function chatWithAI(messages: ChatMessage[]) {
     },
     body: JSON.stringify({
       messages,
-      // System prompt is now handled server-side only for security
     }),
   });
 
@@ -40,15 +39,15 @@ YOUR STRICT CONSULTATION FLOW:
    - Complete Description & Features
    - Desired Tech Stack (e.g., Next.js, Solidity)
    - Budget (in AVAX)
-   - Deadline / Duration
+   - Deadline (a specific date, e.g. "March 30, 2025" or "June 1, 2025")
 
-2. ITERATIVE COLLECTION: If the user misses any items from the form above, politely ask them to complete the missing details.
+2. ITERATIVE COLLECTION: If the user misses any items from the form above, politely ask them to complete the missing details. If the user gives a vague duration like "2 weeks" or "1 month", convert it to a specific date based on today and confirm with the user before proceeding.
 
 3. FINAL SUMMARY: Once all details are gathered, provide a clean "Project Summary" with EXACTLY this strictly formatted list:
    Title: [Title]
    Description: [Description]
    Budget: [Amount] AVAX
-   Duration: [Duration]
+   Deadline: [Specific date, e.g. "March 30, 2025"]
    Tech Stack: [Stack]
 
    After the list, include your Risk Assessment (Low/Medium/High). Ask: "Are you ready to deploy this smart contract to the Avalanche network?"
@@ -67,7 +66,7 @@ REQUIRED DEPLOYMENT JSON FORMAT:
     "description": "String",
     "totalAmount": "String (e.g. '0.5')",
     "techStack": ["Array", "of", "Strings"],
-    "duration": "String",
+    "deadline": "YYYY-MM-DD (ISO date format, e.g. '2025-06-01')",
     "riskLevel": "Low/Medium/High",
     "team": [ {"role": "String", "description": "String", "budget": "String"} ],
     "milestones": [ {"id": 1, "title": "String", "description": "String", "amount": "String"} ]
@@ -76,6 +75,7 @@ REQUIRED DEPLOYMENT JSON FORMAT:
 \`\`\`
 
 CRITICAL: 
+- The "deadline" field MUST be a valid ISO date string in "YYYY-MM-DD" format. Never use relative strings like "2 weeks" or "1 month".
 - Never show the JSON template or blocks to the user during the chat. 
 - Only output the filled JSON block when it is time to deploy.
 - Respond professionally in English ONLY, acting as a Senior Web3 Product Manager.
@@ -93,7 +93,6 @@ function isValidGithubUrl(url: string): boolean {
 
 export async function auditCode(githubUrl: string, projectRequirements: string) {
   try {
-    // Security: Validate GitHub URL to prevent SSRF attacks
     if (!isValidGithubUrl(githubUrl)) {
       return {
         score: 0,
@@ -103,7 +102,6 @@ export async function auditCode(githubUrl: string, projectRequirements: string) 
       };
     }
 
-    // Convert GitHub URL to Raw content
     const rawUrl = githubUrl
       .replace("github.com", "raw.githubusercontent.com")
       .replace("/blob/", "/");
@@ -156,7 +154,6 @@ export async function auditCode(githubUrl: string, projectRequirements: string) 
 
     const response = await chatWithAI([{ role: "assistant", content: "I am ready to audit the code." }, { role: "user", content: auditPrompt }]);
 
-    // Attempt to parse JSON
     const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || response.match(/\{[\s\S]*?\}/);
     if (jsonMatch) {
       try {
@@ -167,7 +164,6 @@ export async function auditCode(githubUrl: string, projectRequirements: string) 
       }
     }
 
-    // SECURITY FIX: Fallback is FAIL, not PASS — unparseable audit = failed audit
     return {
       score: 0,
       status: "FAIL" as const,

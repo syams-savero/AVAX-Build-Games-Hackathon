@@ -5,7 +5,6 @@ import { useWallet } from "@/lib/wallet-context";
 import { addEscrow } from "@/lib/escrow-store";
 import { type Milestone, type TeamMember, ACTIVE_NETWORK } from "@/lib/kite-config";
 import { chatWithAI, SYSTEM_PROMPT, type ChatMessage } from "@/lib/ai";
-import { CONTRACT_ABI, CONTRACT_BYTECODE } from "@/lib/contract";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -43,7 +42,7 @@ interface EscrowPreview {
   totalAmount: string; // Always in AVAX (e.g. "0.5")
   team?: TeamMember[];
   riskLevel: "Low" | "Medium" | "High";
-  duration: string;
+  deadline: string; // ISO date string, e.g. "2025-06-01" — wajib diisi AI
 }
 
 interface ConsultationResult {
@@ -59,7 +58,7 @@ const WELCOME_MSG: Message = {
   id: "welcome",
   role: "assistant",
   content:
-    "Welcome to ChainLancer AI. I'm your autonomous recruiter and project auditor. \n\nI analyze your needs, assemble expert teams, and secure your project lifecycle on the Avalanche network. \n\n**What can I help you build today?**\n\n💡 Tip: Mention your budget in AVAX, e.g. *\"Build a website, budget 0.5 AVAX, 2 weeks\"*",
+    "Welcome to ChainLancer AI. I'm your autonomous recruiter and project auditor. \n\nI analyze your needs, assemble expert teams, and secure your project lifecycle on the Avalanche network. \n\n**What can I help you build today?**\n\n💡 Tip: Mention your budget in AVAX and deadline, e.g. *\"Build a website, budget 0.5 AVAX, deadline March 30\"*",
 };
 
 // ─── MAX AVAX GUARD (testnet safety) ────────────────────────────────────────
@@ -88,20 +87,15 @@ export function AIChat() {
   // ─── Parse AVAX amount from user message ──────────────────────────────────
   const parseAvaxAmount = (text: string): string => {
     const lower = text.toLowerCase();
-
-    // Match patterns like: "0.5 avax", "1.5avax", "2 avax"
     const avaxMatch = lower.match(/(\d+(?:\.\d+)?)\s*avax/);
     if (avaxMatch) {
       const val = parseFloat(avaxMatch[1]);
       if (!isNaN(val) && val > 0) {
-        // Cap at max testnet amount
         return String(Math.min(val, MAX_AVAX_TESTNET));
       }
     }
-
     return DEFAULT_AVAX_AMOUNT;
   };
-
 
   const handleMagicDemo = async (userInput: string) => {
     setIsProcessing(true);
@@ -124,18 +118,26 @@ export function AIChat() {
         content: response,
       };
 
-      // Check for JSON action at the end
       const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || response.match(/\{[\s\S]*"action"\s*:\s*"DEPLOY_CONTRACT"[\s\S]*\}/);
       if (jsonMatch) {
         try {
           const rawJson = jsonMatch[1] || jsonMatch[0];
           const actionData = JSON.parse(rawJson);
           if (actionData.action === "DEPLOY_CONTRACT") {
-            // ✅ Re-parse totalAmount to make sure it's valid AVAX
             const rawPreview = actionData.data as EscrowPreview;
+
+            // Pastikan deadline valid ISO date, fallback 30 hari dari sekarang
+            let deadline = rawPreview.deadline;
+            if (!deadline || isNaN(Date.parse(deadline))) {
+              const fallback = new Date();
+              fallback.setDate(fallback.getDate() + 30);
+              deadline = fallback.toISOString().slice(0, 10);
+            }
+
             newMsg.escrowPreview = {
               ...rawPreview,
               totalAmount: String(parseFloat(rawPreview.totalAmount || "0.1") || 0.1),
+              deadline,
             };
             setChatState("READY");
           }
@@ -174,7 +176,6 @@ export function AIChat() {
   };
 
   const handleDeploy = async (preview: EscrowPreview) => {
-    // ✅ VALIDATION GUARD before sending transaction
     const avaxAmount = parseFloat(preview.totalAmount);
 
     if (isNaN(avaxAmount) || avaxAmount <= 0) {
@@ -196,19 +197,18 @@ export function AIChat() {
       const { createProjectOnChain, CONTRACT_ADDRESS, CONTRACT_ABI } = await import("@/lib/contract");
       const { ethers } = await import("ethers");
 
-      console.log(`Deploying project with budget: ${avaxAmount} AVAX`);
+      console.log(`Deploying project with budget: ${avaxAmount} AVAX, deadline: ${preview.deadline}`);
 
       const { hash: txHash, onChainId: realOnChainId } = await createProjectOnChain(
         CONTRACT_ADDRESS,
         preview.title,
         preview.description,
-        String(avaxAmount), // ✅ Correct AVAX string, e.g. "0.5"
+        String(avaxAmount),
         30
       );
 
       toast.loading("Database syncing...", { id: deployToast });
 
-      // Add to Supabase
       await addEscrow({
         title: preview.title,
         description: preview.description,
@@ -225,7 +225,7 @@ export function AIChat() {
         onChainId: realOnChainId,
         team: preview.team,
         riskLevel: preview.riskLevel,
-        duration: preview.duration,
+        duration: preview.deadline,   // kolom DB tetap "duration", isinya sekarang ISO date
         techStack: (preview as any).techStack || [],
         aiAuditResult: ""
       });
@@ -235,7 +235,7 @@ export function AIChat() {
       setMessages((prev) => [...prev, {
         id: `deploy-${Date.now()}`,
         role: "system",
-        content: `**Project Created On-Chain!** 🚀\n\nProject ID: **#${realOnChainId}**\nBudget: **${avaxAmount} AVAX** (escrowed)\nTransaction: [View on Explorer](${ACTIVE_NETWORK.blockExplorerUrl}/tx/${txHash})\n\nTokens have been escrowed. Talent can now find your job in the Board.`,
+        content: `**Project Created On-Chain!** 🚀\n\nProject ID: **#${realOnChainId}**\nBudget: **${avaxAmount} AVAX** (escrowed)\nDeadline: **${new Date(preview.deadline).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}**\nTransaction: [View on Explorer](${ACTIVE_NETWORK.blockExplorerUrl}/tx/${txHash})\n\nTokens have been escrowed. Talent can now find your job in the Board.`,
       }]);
     } catch (error: any) {
       toast.error("Transaction failed: " + error.message, { id: deployToast });
@@ -315,9 +315,14 @@ export function AIChat() {
                       <span className="text-slate-500 min-w-[80px]">DESC:</span>
                       <span className="text-slate-900 text-[11px] text-right opacity-80 line-clamp-2 md:line-clamp-3 leading-relaxed mt-0.5">{msg.escrowPreview.description}</span>
                     </div>
+                    {/* Deadline — ganti dari DURATION */}
                     <div className="flex justify-between items-start gap-4">
-                      <span className="text-slate-500 min-w-[80px]">DURATION:</span>
-                      <span className="text-slate-900 font-medium text-right uppercase">{msg.escrowPreview.duration || "TBD"}</span>
+                      <span className="text-slate-500 min-w-[80px]">DEADLINE:</span>
+                      <span className="text-slate-900 font-medium text-right uppercase">
+                        {new Date(msg.escrowPreview.deadline).toLocaleDateString("en-US", {
+                          month: "short", day: "numeric", year: "numeric"
+                        })}
+                      </span>
                     </div>
 
                     {(msg.escrowPreview.team && msg.escrowPreview.team.length > 0) && (
@@ -411,7 +416,7 @@ export function AIChat() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Describe your project (budget in AVAX, goals, timeline)..."
+            placeholder="Describe your project (budget in AVAX, deadline, goals)..."
             disabled={isProcessing}
             className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-6 pr-14 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 transition-all"
           />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useWallet } from "@/lib/wallet-context";
 import {
   getEscrows,
@@ -10,6 +11,10 @@ import {
   updateProposalStatus,
   assignWorker,
   reloadEscrows,
+  deleteEscrow,
+  updateEscrow,
+  checkAndExpireEscrows,
+  cancelOverdueEscrow,
 } from "@/lib/escrow-store";
 import {
   type EscrowContract,
@@ -39,7 +44,14 @@ import {
   Users,
   ShieldCheck,
   TrendingUp,
-  Loader2
+  Loader2,
+  Pencil,
+  Trash2,
+  X,
+  Calendar,
+  Lock,
+  Info,
+  AlertTriangle
 } from "lucide-react";
 import Link from "next/link";
 
@@ -267,12 +279,13 @@ function MilestoneReviewRow({
   milestone,
   escrow,
   onRelease,
+  disabled = false,
 }: {
   milestone: Milestone;
   escrow: EscrowContract;
   onRelease: () => void;
+  disabled?: boolean;
 }) {
-  // Cek milestone dulu (data baru), fallback ke escrow level (data lama sebelum fix)
   const submittedUrl = milestone.githubUrl ?? escrow.githubUrl ?? "";
 
   return (
@@ -290,14 +303,281 @@ function MilestoneReviewRow({
       ) : (
         <span className="text-[10px] text-slate-400 italic">No link yet</span>
       )}
-      <Button
-        size="sm"
-        onClick={onRelease}
-        className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 font-black text-[10px] uppercase tracking-widest"
-      >
-        ✓ Approve & Release
-      </Button>
+      {disabled ? (
+        <div className="flex flex-col items-end gap-1">
+          <Button size="sm" disabled className="h-9 rounded-lg px-4 font-black text-[10px] uppercase tracking-widest opacity-40 cursor-not-allowed bg-emerald-600 text-white">
+            ✓ Approve & Release
+          </Button>
+          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">No freelancer hired</span>
+        </div>
+      ) : (
+        <CountdownButton onConfirm={onRelease} label="✓ Approve & Release" />
+      )}
     </div>
+  );
+}
+
+// ─── Delete Confirm Modal ─────────────────────────────────────────────────────
+function DeleteConfirmModal({
+  escrow,
+  onConfirm,
+  onClose,
+}: {
+  escrow: EscrowContract;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const [count, setCount] = useState(3);
+  const hasOnChain = escrow.onChainId !== undefined && escrow.onChainId !== null;
+
+  useEffect(() => {
+    if (count === 0) return;
+    const t = setTimeout(() => setCount((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [count]);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm mx-4 p-6 space-y-5">
+        {/* Icon */}
+        <div className="flex justify-center">
+          <div className="h-14 w-14 rounded-full bg-red-50 border border-red-100 flex items-center justify-center">
+            <Trash2 className="h-6 w-6 text-red-500" />
+          </div>
+        </div>
+
+        {/* Text */}
+        <div className="text-center space-y-2">
+          <h3 className="text-base font-black text-slate-900">Delete this contract?</h3>
+          <p className="text-sm text-slate-500 leading-relaxed">
+            Are you sure you want to delete{" "}
+            <span className="font-bold text-slate-700">"{escrow.title}"</span>?
+            {hasOnChain && escrow.totalAmount && (
+              <>
+                {" "}Your locked budget of{" "}
+                <span className="font-black text-emerald-600">{escrow.totalAmount} AVAX</span>{" "}
+                will be refunded to your wallet.
+              </>
+            )}
+          </p>
+          {hasOnChain && (
+            <p className="text-[11px] text-slate-400 font-medium">
+              MetaMask will ask you to confirm the on-chain cancellation.
+            </p>
+          )}
+        </div>
+
+        {/* Buttons */}
+        <div className="flex gap-2 pt-1">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="flex-1 rounded-xl font-black text-[11px] uppercase tracking-widest border-slate-200 h-11"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={onConfirm}
+            disabled={count > 0}
+            className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white font-black text-[11px] uppercase tracking-widest h-11 disabled:opacity-60 transition-all"
+          >
+            {count > 0 ? `Delete (${count}s)` : "Yes, Delete"}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// ─── Countdown confirm button (5 detik) ──────────────────────────────────────
+function CountdownButton({
+  onConfirm,
+  label = "Approve & Release",
+  className = "",
+}: {
+  onConfirm: () => void;
+  label?: string;
+  className?: string;
+}) {
+  const [counting, setCounting] = useState(false);
+  const [count, setCount] = useState(5);
+
+  useEffect(() => {
+    if (!counting) return;
+    if (count === 0) {
+      setCounting(false);
+      setCount(5);
+      onConfirm();
+      return;
+    }
+    const t = setTimeout(() => setCount((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [counting, count, onConfirm]);
+
+  const handleClick = () => {
+    if (counting) {
+      // Cancel
+      setCounting(false);
+      setCount(5);
+    } else {
+      setCounting(true);
+    }
+  };
+
+  return (
+    <Button
+      size="sm"
+      onClick={handleClick}
+      className={`h-8 rounded-lg px-4 font-black text-[10px] uppercase tracking-widest transition-all ${counting
+          ? "bg-amber-500 hover:bg-red-500 text-white"
+          : "bg-emerald-600 hover:bg-emerald-700 text-white"
+        } ${className}`}
+    >
+      {counting ? (
+        <span className="flex items-center gap-1.5">
+          <X className="h-3 w-3" /> Cancel ({count}s)
+        </span>
+      ) : (
+        label
+      )}
+    </Button>
+  );
+}
+
+// ─── Edit Escrow Modal ────────────────────────────────────────────────────────
+function EditEscrowModal({
+  escrow,
+  onClose,
+  onSave,
+}: {
+  escrow: EscrowContract;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [title, setTitle] = useState(escrow.title);
+  const [description, setDescription] = useState(escrow.description);
+  // deadline disimpan sebagai "YYYY-MM-DD" untuk input type=date
+  const [deadline, setDeadline] = useState<string>(
+    escrow.deadline ? escrow.deadline.slice(0, 10) : ""
+  );
+  const [isSaving, setIsSaving] = useState(false);
+  const hasOnChain = escrow.onChainId !== undefined && escrow.onChainId !== null;
+
+  // Minimum deadline = besok
+  const minDate = new Date();
+  minDate.setDate(minDate.getDate() + 1);
+  const minDateStr = minDate.toISOString().slice(0, 10);
+
+  const handleSave = async () => {
+    if (!title.trim()) { toast.error("Title is required"); return; }
+    if (deadline && deadline < minDateStr) {
+      toast.error("Deadline must be at least tomorrow");
+      return;
+    }
+    setIsSaving(true);
+    const result = await updateEscrow(escrow.id, {
+      title,
+      description,
+      deadline: deadline || null,
+    });
+    if (result.success) {
+      toast.success("Contract updated!");
+      onSave();
+      onClose();
+    } else {
+      toast.error(result.error ?? "Update failed");
+    }
+    setIsSaving(false);
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md mx-4 p-6 space-y-4">
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Edit Contract</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Fields */}
+        <div className="space-y-3">
+          {/* Title */}
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Title</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="mt-1 rounded-xl border-slate-200 text-sm font-bold"
+              disabled={isSaving}
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              disabled={isSaving}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+
+          {/* Deadline */}
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <Calendar className="h-3 w-3" /> Deadline
+            </label>
+            <input
+              type="date"
+              value={deadline}
+              min={minDateStr}
+              onChange={(e) => setDeadline(e.target.value)}
+              disabled={isSaving}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+            />
+            {deadline && (
+              <p className="mt-1 text-[10px] text-amber-600 font-bold flex items-center gap-1">
+                <Info className="h-3 w-3" />
+                Project will auto-cancel and refund AVAX if not completed by this date.
+              </p>
+            )}
+          </div>
+
+          {/* Budget — locked, explain why */}
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+              <Lock className="h-3 w-3" /> Budget
+            </label>
+            <div className="mt-1 w-full rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 flex items-center justify-between">
+              <span className="text-sm font-black text-slate-400">{escrow.totalAmount} AVAX</span>
+              <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Locked</span>
+            </div>
+            <p className="mt-1.5 text-[10px] text-slate-400 font-medium leading-relaxed">
+              {hasOnChain
+                ? "Budget is locked in the smart contract and cannot be changed. To use a different budget, delete this contract and create a new one — your current AVAX will be refunded."
+                : "Budget cannot be changed after a project is created. Delete and recreate the contract to use a different budget."}
+            </p>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-1">
+          <Button variant="outline" onClick={onClose} className="flex-1 rounded-xl font-black text-[10px] uppercase" disabled={isSaving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={isSaving} className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase">
+            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save Changes"}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -323,7 +603,12 @@ function EscrowCard({
 
   const [proposals, setProposals] = useState<any[]>([]);
   const [isLoadingProposals, setIsLoadingProposals] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const { address } = useWallet();
+  const isFreelancer = address?.toLowerCase() === escrow.worker?.toLowerCase();
+  const isEmployer = address?.toLowerCase() === escrow.employer?.toLowerCase();
 
   const loadProposals = useCallback(async () => {
     if (escrow.status === "created") {
@@ -363,6 +648,67 @@ function EscrowCard({
     }
   };
 
+  // ✅ Delete — buka modal konfirmasi
+  const handleDelete = () => {
+    if (escrow.worker) {
+      toast.error("Cannot delete — a freelancer has already been hired.");
+      return;
+    }
+    setShowDeleteModal(true);
+  };
+
+  // ✅ Cancel overdue — khusus kalau deadline lewat + sudah ada worker tapi belum submit
+  const isOverdue = escrow.deadline
+    ? new Date(escrow.deadline) < new Date()
+    : false;
+  const hasSubmission = escrow.milestones?.some(
+    (m) => m.status === "submitted" || !!m.githubUrl
+  ) || !!escrow.githubUrl;
+  const canForceCancel = isOverdue && !!escrow.worker && !hasSubmission;
+
+  const [isCancellingOverdue, setIsCancellingOverdue] = useState(false);
+  const [showOverdueCancelModal, setShowOverdueCancelModal] = useState(false);
+
+  const handleOverdueCancel = async () => {
+    setShowOverdueCancelModal(false);
+    setIsCancellingOverdue(true);
+    const cancelToast = toast.loading("Cancelling overdue contract — AVAX will be refunded...");
+    const result = await cancelOverdueEscrow(escrow.id);
+    if (result.success) {
+      toast.success("Contract cancelled. AVAX refunded to your wallet ✓", { id: cancelToast });
+      onUpdate();
+    } else if (result.error === "user_rejected") {
+      toast.error("Cancelled — MetaMask transaction rejected.", { id: cancelToast });
+    } else {
+      toast.error(result.error ?? "Cancel failed", { id: cancelToast });
+    }
+    setIsCancellingOverdue(false);
+  };
+
+  const executeDelete = async () => {
+    setShowDeleteModal(false);
+    setIsDeleting(true);
+    const hasOnChain = escrow.onChainId !== undefined && escrow.onChainId !== null;
+    const deleteToast = toast.loading(
+      hasOnChain ? "Cancelling contract — AVAX will be refunded..." : "Deleting contract..."
+    );
+    const result = await deleteEscrow(escrow.id);
+    if (result.success) {
+      toast.success(
+        hasOnChain ? "Contract cancelled. AVAX refunded to your wallet ✓" : "Contract deleted.",
+        { id: deleteToast }
+      );
+      onUpdate();
+    } else {
+      if (result.error === "user_rejected") {
+        toast.error("Cancelled — MetaMask transaction rejected.", { id: deleteToast });
+      } else {
+        toast.error(result.error ?? "Delete failed", { id: deleteToast });
+      }
+      setIsDeleting(false);
+    }
+  };
+
   // Release payment — on-chain dulu baru Supabase
   const handleRelease = async (milestoneId: number) => {
     const releaseToast = toast.loading("Releasing payment on-chain...");
@@ -383,8 +729,7 @@ function EscrowCard({
     }
   };
 
-  const isFreelancer = address?.toLowerCase() === escrow.worker?.toLowerCase();
-  const isEmployer = address?.toLowerCase() === escrow.employer?.toLowerCase();
+
 
   return (
     <Card className="overflow-hidden border-slate-200 bg-white transition-all hover:shadow-xl hover:shadow-emerald-500/5">
@@ -414,11 +759,99 @@ function EscrowCard({
               </p>
             </div>
           </div>
-          <Badge className={statusConfig.className}>
-            <StatusIcon className="mr-1.5 h-3.5 w-3.5" />
-            {statusConfig.label}
-          </Badge>
+          <div className="flex items-center gap-2">
+            {/* Edit & Delete — employer only, sebelum hire */}
+            {isEmployer && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  title="Edit contract"
+                  className="h-8 w-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-300 hover:bg-emerald-50 transition-all"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={isDeleting || !!escrow.worker}
+                  title={escrow.worker ? "Cannot delete — freelancer hired" : `Delete contract — ${escrow.totalAmount ?? "?"} AVAX will be refunded`}
+                  className="h-8 w-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-300 hover:bg-red-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                </button>
+                {/* Cancel & Refund — hanya muncul kalau overdue + ada worker + belum submit */}
+                {canForceCancel && (
+                  <button
+                    onClick={() => setShowOverdueCancelModal(true)}
+                    disabled={isCancellingOverdue}
+                    title={`Force cancel — freelancer overdue. ${escrow.totalAmount} AVAX will be refunded.`}
+                    className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-red-200 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all text-[10px] font-black uppercase tracking-widest disabled:opacity-50"
+                  >
+                    {isCancellingOverdue
+                      ? <Loader2 className="h-3 w-3 animate-spin" />
+                      : <><AlertTriangle className="h-3 w-3" /> Cancel & Refund</>
+                    }
+                  </button>
+                )}
+              </div>
+            )}
+            <Badge className={statusConfig.className}>
+              <StatusIcon className="mr-1.5 h-3.5 w-3.5" />
+              {statusConfig.label}
+            </Badge>
+          </div>
         </div>
+
+        {/* Edit Modal */}
+        {showEditModal && (
+          <EditEscrowModal
+            escrow={escrow}
+            onClose={() => setShowEditModal(false)}
+            onSave={onUpdate}
+          />
+        )}
+
+        {/* Delete Confirm Modal */}
+        {showDeleteModal && (
+          <DeleteConfirmModal
+            escrow={escrow}
+            onConfirm={executeDelete}
+            onClose={() => setShowDeleteModal(false)}
+          />
+        )}
+
+        {/* Overdue Cancel Modal */}
+        {showOverdueCancelModal && createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-sm mx-4 p-6 space-y-5">
+              <div className="flex justify-center">
+                <div className="h-14 w-14 rounded-full bg-red-50 border border-red-100 flex items-center justify-center">
+                  <AlertTriangle className="h-6 w-6 text-red-500" />
+                </div>
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-base font-black text-slate-900">Cancel Overdue Contract?</h3>
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  The deadline for <span className="font-bold text-slate-700">"{escrow.title}"</span> has passed and the freelancer has not submitted any work.
+                </p>
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  Your locked budget of <span className="font-black text-emerald-600">{escrow.totalAmount} AVAX</span> will be refunded to your wallet.
+                </p>
+                <p className="text-[11px] text-amber-600 font-bold bg-amber-50 rounded-xl px-3 py-2 mt-2">
+                  ⚠️ This will terminate the contract with the freelancer.
+                </p>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" onClick={() => setShowOverdueCancelModal(false)} className="flex-1 rounded-xl font-black text-[11px] uppercase h-11">
+                  Keep Waiting
+                </Button>
+                <Button onClick={handleOverdueCancel} className="flex-1 rounded-xl bg-red-500 hover:bg-red-600 text-white font-black text-[11px] uppercase h-11">
+                  Cancel & Refund
+                </Button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
         <div className="mt-5 flex flex-wrap items-center gap-6">
           <div className="flex flex-col">
@@ -698,19 +1131,30 @@ function EscrowCard({
                               <MilestoneReviewRow
                                 milestone={milestone}
                                 escrow={escrow}
-                                onRelease={() => handleRelease(milestone.id)}
+                                onRelease={escrow.worker ? () => handleRelease(milestone.id) : () => { }}
+                                disabled={!escrow.worker}
                               />
                             );
                           }
-                          // Belum ada submission — tombol Release saja
+                          // Belum ada submission — Release disabled kalau belum ada worker
+                          const noWorker = !escrow.worker;
                           return (
-                            <Button
-                              size="sm"
-                              onClick={() => handleRelease(milestone.id)}
-                              className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 font-bold"
-                            >
-                              Release
-                            </Button>
+                            <div className="flex flex-col items-end gap-1">
+                              <Button
+                                size="sm"
+                                onClick={() => handleRelease(milestone.id)}
+                                disabled={noWorker}
+                                title={noWorker ? "Hire a freelancer first before releasing payment" : "Release payment"}
+                                className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-4 font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                Release
+                              </Button>
+                              {noWorker && (
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                  No freelancer hired
+                                </span>
+                              )}
+                            </div>
                           );
                         })()}
                       </>

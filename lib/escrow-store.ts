@@ -12,6 +12,7 @@ function mapRow(item: any): EscrowContract {
     onChainId: item.on_chain_id,
     totalAmount: item.total_amount,
     createdAt: item.created_at,
+    deadline: item.duration ?? null,  // kolom DB = "duration", app = "deadline"
     contractAddress: item.contract_address,
     riskLevel: item.risk_level,
     githubUrl: item.github_url,
@@ -208,6 +209,182 @@ export async function assignWorker(escrowId: string, workerAddress: string) {
       .eq("id", escrowId);
 
     if (error) console.error("Supabase worker assignment error:", error.message, error.hint);
+  }
+}
+
+// ✅ Delete escrow — cancel on-chain dulu (refund AVAX), baru hapus Supabase
+export async function deleteEscrow(escrowId: string): Promise<{ success: boolean; error?: string }> {
+  const escrow = escrows.find((e) => e.id === escrowId);
+  if (!escrow) return { success: false, error: "Escrow not found" };
+  if (escrow.worker) return { success: false, error: "Cannot delete — freelancer already hired" };
+
+  // Step 1: Cancel on-chain → AVAX dikembalikan ke employer
+  // cancelProject di contract handle status Open & Assigned, refund ke client
+  if (escrow.onChainId !== undefined && escrow.onChainId !== null) {
+    console.log("deleteEscrow: calling cancelProject on-chain...", escrow.onChainId);
+    try {
+      const { cancelProjectOnChain, CONTRACT_ADDRESS } = await import("@/lib/contract");
+      await cancelProjectOnChain(CONTRACT_ADDRESS, Number(escrow.onChainId));
+      console.log("deleteEscrow: ✅ on-chain cancel success, AVAX refunded");
+    } catch (onChainErr: any) {
+      // Cek apakah user sengaja reject di MetaMask
+      const isUserRejected =
+        onChainErr?.code === 4001 ||
+        onChainErr?.code === "ACTION_REJECTED" ||
+        onChainErr?.message?.toLowerCase().includes("user rejected") ||
+        onChainErr?.message?.toLowerCase().includes("user denied");
+
+      if (isUserRejected) {
+        console.log("deleteEscrow: user rejected MetaMask — cancel aborted");
+        return { success: false, error: "user_rejected" };
+      }
+
+      console.error("deleteEscrow: on-chain cancel failed:", onChainErr.message);
+      return { success: false, error: "On-chain cancel failed: " + onChainErr.message };
+    }
+  }
+
+  // Step 2: Hapus dari Supabase
+  console.log("deleteEscrow: deleting from Supabase...", escrowId);
+  const { error, count } = await supabase
+    .from("escrows")
+    .delete()
+    .eq("id", escrowId)
+    .select();
+
+  if (error) {
+    console.error("Supabase delete error:", error.code, error.message, error.hint);
+    return { success: false, error: error.message };
+  }
+
+  console.log("deleteEscrow: ✅ Supabase delete success, rows affected:", count);
+
+  // Step 3: Update in-memory cache
+  escrows = escrows.filter((e) => e.id !== escrowId);
+  notify();
+
+  return { success: true };
+}
+
+// ✅ Cancel escrow meski sudah ada worker — hanya boleh kalau deadline sudah lewat
+// AVAX refund ke employer via cancelProject on-chain (status Assigned)
+export async function cancelOverdueEscrow(escrowId: string): Promise<{ success: boolean; error?: string }> {
+  const escrow = escrows.find((e) => e.id === escrowId);
+  if (!escrow) return { success: false, error: "Escrow not found" };
+
+  // Guard: hanya boleh kalau deadline sudah lewat
+  if (escrow.deadline) {
+    const isOverdue = new Date(escrow.deadline) < new Date();
+    if (!isOverdue) return { success: false, error: "Deadline has not passed yet" };
+  } else {
+    return { success: false, error: "No deadline set — cannot force cancel" };
+  }
+
+  // Guard: freelancer belum submit (kalau sudah submit, employer harus review dulu)
+  const hasSubmission = escrow.milestones?.some(
+    (m) => m.status === "submitted" || !!m.githubUrl
+  ) || !!escrow.githubUrl;
+  if (hasSubmission) {
+    return { success: false, error: "Freelancer has already submitted work — please review before cancelling" };
+  }
+
+  // Step 1: Cancel on-chain → AVAX refund ke employer
+  if (escrow.onChainId !== undefined && escrow.onChainId !== null) {
+    console.log("cancelOverdueEscrow: calling cancelProject on-chain...", escrow.onChainId);
+    try {
+      const { cancelProjectOnChain, CONTRACT_ADDRESS } = await import("@/lib/contract");
+      await cancelProjectOnChain(CONTRACT_ADDRESS, Number(escrow.onChainId));
+      console.log("cancelOverdueEscrow: ✅ on-chain cancel success, AVAX refunded");
+    } catch (onChainErr: any) {
+      const isUserRejected =
+        onChainErr?.code === 4001 ||
+        onChainErr?.code === "ACTION_REJECTED" ||
+        onChainErr?.message?.toLowerCase().includes("user rejected") ||
+        onChainErr?.message?.toLowerCase().includes("user denied");
+
+      if (isUserRejected) return { success: false, error: "user_rejected" };
+      return { success: false, error: "On-chain cancel failed: " + onChainErr.message };
+    }
+  }
+
+  // Step 2: Hapus dari Supabase
+  const { error } = await supabase
+    .from("escrows")
+    .delete()
+    .eq("id", escrowId)
+    .select();
+
+  if (error) {
+    console.error("Supabase delete error:", error.message);
+    return { success: false, error: error.message };
+  }
+
+  // Step 3: Update in-memory
+  escrows = escrows.filter((e) => e.id !== escrowId);
+  notify();
+
+  return { success: true };
+}
+
+// ✅ Update escrow title, description, deadline, milestones
+export async function updateEscrow(
+  escrowId: string,
+  updates: {
+    title?: string;
+    description?: string;
+    deadline?: string | null;
+    milestones?: EscrowContract["milestones"];
+  }
+): Promise<{ success: boolean; error?: string }> {
+  const escrow = escrows.find((e) => e.id === escrowId);
+  if (!escrow) return { success: false, error: "Escrow not found" };
+  if (escrow.worker) return { success: false, error: "Cannot edit — freelancer already hired" };
+
+  escrows = escrows.map((e) =>
+    e.id === escrowId ? { ...e, ...updates, deadline: updates.deadline ?? undefined } : e
+  );
+  notify();
+
+  const payload: any = {};
+  if (updates.title !== undefined) payload.title = updates.title;
+  if (updates.description !== undefined) payload.description = updates.description;
+  if (updates.deadline !== undefined) payload.duration = updates.deadline;  // kolom DB = "duration"
+  if (updates.milestones !== undefined) payload.milestones = updates.milestones;
+
+  const { error } = await supabase.from("escrows").update(payload).eq("id", escrowId);
+  if (error) {
+    console.error("Supabase update error:", error.message);
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
+// ✅ Auto-expire: cek semua escrow yang sudah lewat deadline
+// Dipanggil client-side saat dashboard dibuka
+export async function checkAndExpireEscrows(): Promise<void> {
+  const now = new Date();
+
+  const expired = escrows.filter((e) => {
+    if (!e.deadline) return false;
+    if (e.status === "completed" || e.status === "cancelled") return false;
+    if (e.worker) return false; // sudah hire, jangan auto-cancel
+    return new Date(e.deadline) < now;
+  });
+
+  if (expired.length === 0) return;
+
+  console.log(`checkAndExpireEscrows: ${expired.length} expired escrow(s) found`);
+
+  for (const escrow of expired) {
+    console.log(`Auto-expiring escrow: ${escrow.id} — deadline: ${escrow.deadline}`);
+    const result = await deleteEscrow(escrow.id);
+    if (result.success) {
+      console.log(`✅ Auto-expired: ${escrow.id}`);
+    } else if (result.error === "user_rejected") {
+      console.log(`Auto-expire skipped (user rejected MetaMask): ${escrow.id}`);
+    } else {
+      console.error(`Auto-expire failed for ${escrow.id}:`, result.error);
+    }
   }
 }
 

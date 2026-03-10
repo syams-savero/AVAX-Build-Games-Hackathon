@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { getEscrows, subscribe } from "@/lib/escrow-store";
+import { getEscrows, subscribe, reloadEscrows } from "@/lib/escrow-store";
 import { formatKite, ACTIVE_NETWORK } from "@/lib/kite-config";
 
 const CATEGORIES = [
@@ -113,9 +113,18 @@ const FEATURED_JOBS = [
 
 export default function AppHome() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [escrows, setEscrows] = useState(getEscrows());
+
+  // ✅ Fix hydration: inisialisasi dengan [] dulu, load data client-side di useEffect
+  const [escrows, setEscrows] = useState<any[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
+    // Load fresh data dari Supabase saat client mount
+    reloadEscrows().then(() => {
+      setEscrows(getEscrows());
+    });
+    // Subscribe ke perubahan realtime
     return subscribe(() => {
       setEscrows(getEscrows());
     });
@@ -131,7 +140,6 @@ export default function AppHome() {
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
-  // Smooth out mouse movements for the "spotlight"
   const smoothX = useSpring(mouseX, { damping: 50, stiffness: 400 });
   const smoothY = useSpring(mouseY, { damping: 50, stiffness: 400 });
 
@@ -156,15 +164,13 @@ export default function AppHome() {
 
   return (
     <div className="bg-transparent">
-      {/* Hero Section with Localized Animation */}
+      {/* Hero Section */}
       <section
         onMouseMove={handleMouseMove}
         onMouseDown={handleMouseDown}
         className="relative overflow-hidden bg-white px-4 py-24 sm:px-6 lg:px-8 min-h-[600px] flex items-center group/hero border-b border-slate-100"
       >
-        {/* Localized Gokite-inspired Background Layer */}
         <div className="absolute inset-0 pointer-events-none z-0">
-          {/* Soft Dot Grid */}
           <div
             className="absolute inset-0 opacity-[0.2]"
             style={{
@@ -172,8 +178,6 @@ export default function AppHome() {
               backgroundSize: '32px 32px'
             }}
           />
-
-          {/* Moving Spotlight - Using section-local coordinates */}
           <motion.div
             className="absolute inset-0 z-0"
             style={{
@@ -186,8 +190,6 @@ export default function AppHome() {
               top: 0
             }}
           />
-
-          {/* Water Ripples (Localized to Hero Container) */}
           <AnimatePresence>
             {ripples.map((ripple) => (
               <div key={ripple.id} className="absolute pointer-events-none" style={{ left: ripple.x, top: ripple.y }}>
@@ -280,12 +282,8 @@ export default function AppHome() {
               transition={{ duration: 0.8, ease: "easeOut" }}
               className="absolute inset-0"
             >
-              {/* Card 1: Freelancer Profile */}
               <motion.div
-                animate={{
-                  y: [0, -20, 0],
-                  rotate: [2, 0, 2]
-                }}
+                animate={{ y: [0, -20, 0], rotate: [2, 0, 2] }}
                 transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
                 className="absolute top-[5%] right-[0%] w-72 bg-white border border-slate-100 p-6 rounded-3xl shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] pointer-events-auto"
               >
@@ -306,12 +304,8 @@ export default function AppHome() {
                 </div>
               </motion.div>
 
-              {/* Card 2: AI Audit Badge */}
               <motion.div
-                animate={{
-                  y: [0, 20, 0],
-                  scale: [1, 1.05, 1]
-                }}
+                animate={{ y: [0, 20, 0], scale: [1, 1.05, 1] }}
                 transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 1 }}
                 className="absolute top-[40%] left-[0%] bg-emerald-600 text-white p-5 rounded-2xl shadow-xl shadow-emerald-900/10 border border-emerald-500 flex items-center gap-4 pointer-events-auto"
               >
@@ -324,12 +318,8 @@ export default function AppHome() {
                 </div>
               </motion.div>
 
-              {/* Card 3: Service Card Component */}
               <motion.div
-                animate={{
-                  x: [0, -15, 0],
-                  y: [0, 10, 0]
-                }}
+                animate={{ x: [0, -15, 0], y: [0, 10, 0] }}
                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
                 className="absolute bottom-[0%] right-[5%] w-64 bg-white/95 backdrop-blur-md p-5 rounded-3xl shadow-2xl shadow-slate-900/20 border border-white pointer-events-auto"
               >
@@ -345,17 +335,14 @@ export default function AppHome() {
                 </div>
               </motion.div>
 
-              {/* Decorative blobs */}
               <div className="absolute top-[20%] right-[10%] w-64 h-64 bg-white/10 rounded-full blur-3xl -z-10" />
               <div className="absolute bottom-[10%] left-[10%] w-48 h-48 bg-blue-400/20 rounded-full blur-3xl -z-10" />
             </motion.div>
           </div>
         </div>
 
-        {/* Decorative elements */}
         <div className="absolute top-0 right-0 h-full w-1/3 bg-white/5 skew-x-[-15deg] translate-x-20 pointer-events-none" />
       </section>
-
 
       {/* Browse by Category */}
       <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
@@ -371,12 +358,10 @@ export default function AppHome() {
             </Card>
           ))}
         </div>
-      </section >
-
-      {/* Removed Popular Services section */}
+      </section>
 
       {/* Featured Jobs */}
-      < section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8" >
+      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between mb-12">
           <h2 className="text-3xl font-black tracking-tight text-slate-900">Featured Jobs</h2>
           <Link href="/jobs" className="text-emerald-600 font-bold flex items-center gap-2 group">
@@ -384,7 +369,12 @@ export default function AppHome() {
           </Link>
         </div>
         <div className="space-y-6">
-          {featuredJobs.length > 0 ? (
+          {/* ✅ Render kosong dulu sebelum mounted, hindari hydration mismatch */}
+          {!isMounted ? (
+            <div className="py-20 text-center border-2 border-dashed border-slate-100 rounded-[2rem]">
+              <p className="text-slate-300 font-bold uppercase tracking-widest text-sm">Loading jobs...</p>
+            </div>
+          ) : featuredJobs.length > 0 ? (
             featuredJobs.map((job) => (
               <Card key={job.id} className="p-8 border-slate-200 hover:border-emerald-200 hover:bg-emerald-50/10 transition-all rounded-[2rem] flex flex-col md:flex-row md:items-center justify-between gap-8">
                 <div className="flex-1">
@@ -400,7 +390,7 @@ export default function AppHome() {
                     <span>{new Date(job.createdAt).toLocaleDateString()}</span>
                   </div>
                   <div className="flex flex-wrap gap-2 mb-6">
-                    {(job.techStack || []).map(tag => (
+                    {(job.techStack || []).map((tag: string) => (
                       <Badge key={tag} variant="secondary" className="bg-slate-100 text-slate-500 rounded-lg px-3 py-1 font-bold text-xs">{tag}</Badge>
                     ))}
                   </div>
@@ -426,10 +416,10 @@ export default function AppHome() {
             </div>
           )}
         </div>
-      </section >
+      </section>
 
       {/* How it Works */}
-      < section className="bg-slate-50 px-4 py-24 sm:px-6 lg:px-8" >
+      <section className="bg-slate-50 px-4 py-24 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl text-center">
           <h2 className="text-5xl font-black tracking-tight text-slate-900 mb-20 uppercase">How it Works</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-16">
@@ -462,7 +452,7 @@ export default function AppHome() {
             </div>
           </div>
         </div>
-      </section >
+      </section>
 
       {/* Statistics Section */}
       <section className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-20 text-white">
@@ -486,10 +476,10 @@ export default function AppHome() {
             </div>
           </div>
         </div>
-      </section >
+      </section>
 
-      {/* Ready to get started Section */}
-      < section className="bg-white px-4 py-24 sm:px-6 lg:px-8" >
+      {/* Ready to get started */}
+      <section className="bg-white px-4 py-24 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-4xl text-center">
           <h2 className="text-5xl font-black tracking-tight text-slate-900 mb-6">Ready to get started?</h2>
           <p className="text-slate-500 font-medium text-lg mb-10">
@@ -508,7 +498,7 @@ export default function AppHome() {
             </Link>
           </div>
         </div>
-      </section >
-    </div >
+      </section>
+    </div>
   );
 }

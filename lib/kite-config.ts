@@ -29,10 +29,10 @@ export interface Milestone {
   title: string;
   description: string;
   amount: string;
-  status: "pending" | "in_progress" | "completed" | "disputed" | "submitted"; // ✅ tambah "submitted"
+  status: "pending" | "in_progress" | "completed" | "disputed" | "submitted";
   deadline?: string;
   earlyBonus?: string;
-  githubUrl?: string; // ✅ tambah untuk simpan link submission per-milestone
+  githubUrl?: string;
 }
 
 export interface TeamMember {
@@ -51,11 +51,12 @@ export interface EscrowContract {
   milestones: Milestone[];
   status: EscrowStatus;
   createdAt: string;
+  deadline?: string | null; // ✅ ISO date string, e.g. "2025-06-01" — mapped dari kolom DB "duration"
   onChainId?: number;
   contractAddress?: string;
   team?: TeamMember[];
   riskLevel?: "Low" | "Medium" | "High";
-  duration?: string;
+  duration?: string; // kolom DB lama, jangan dihapus untuk backward compat
   techStack?: string[];
   githubUrl?: string;
   aiAuditResult?: string;
@@ -83,8 +84,8 @@ export const AVALANCHE_FUJI = {
     symbol: "AVAX",
     decimals: 18,
   },
-} as const
+} as const;
 
 // Ganti ini untuk switch network
-export const ACTIVE_NETWORK = AVALANCHE_FUJI
-// export const ACTIVE_NETWORK = KITE_TESTNET
+export const ACTIVE_NETWORK = AVALANCHE_FUJI;
+// export const ACTIVE_NETWORK = KITE_TESTNET;
