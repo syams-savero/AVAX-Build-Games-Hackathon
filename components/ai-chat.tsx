@@ -27,22 +27,31 @@ import {
   Zap
 } from "lucide-react";
 
+interface DeployMeta {
+  onChainId: number;
+  avaxAmount: string;
+  deadline: string;
+  txHash: string;
+  explorerUrl: string;
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   escrowPreview?: EscrowPreview;
   consultationData?: ConsultationResult;
+  deployMeta?: DeployMeta;
 }
 
 interface EscrowPreview {
   title: string;
   description: string;
   milestones: Milestone[];
-  totalAmount: string; // Always in AVAX (e.g. "0.5")
+  totalAmount: string;
   team?: TeamMember[];
   riskLevel: "Low" | "Medium" | "High";
-  deadline: string; // ISO date string, e.g. "2025-06-01" — wajib diisi AI
+  deadline: string;
 }
 
 interface ConsultationResult {
@@ -58,12 +67,59 @@ const WELCOME_MSG: Message = {
   id: "welcome",
   role: "assistant",
   content:
-    "Welcome to ChainLancer AI. I'm your autonomous recruiter and project auditor. \n\nI analyze your needs, assemble expert teams, and secure your project lifecycle on the Avalanche network. \n\n**What can I help you build today?**\n\n💡 Tip: Mention your budget in AVAX and deadline, e.g. *\"Build a website, budget 0.5 AVAX, deadline March 30\"*",
+    "Welcome to ChainLancer AI. I'm your autonomous recruiter and project auditor. \n\nI analyze your needs, assemble expert teams, and secure your project lifecycle on the Avalanche network. \n\n**What can I help you build today?**\n\n💡 Tip: Mention your budget in AVAX and deadline, e.g. *\"Build a website, budget 0.5 AVAX, deadline March 30 2026\"*",
 };
 
-// ─── MAX AVAX GUARD (testnet safety) ────────────────────────────────────────
 const MAX_AVAX_TESTNET = 10;
 const DEFAULT_AVAX_AMOUNT = "0.1";
+
+// ─── Markdown Renderer ────────────────────────────────────────────────────────
+function renderMarkdown(text: string): string {
+  let html = text
+    // Bold
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    // Italic (avoid conflict with bold)
+    .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>")
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code class="bg-slate-100 text-emerald-700 px-1 py-0.5 rounded text-xs font-mono">$1</code>');
+
+  // Process line by line for lists and paragraphs
+  const lines = html.split("\n");
+  const result: string[] = [];
+  let inList = false;
+
+  for (const line of lines) {
+    const bulletMatch = line.match(/^[-•]\s+(.+)/);
+    const numberedMatch = line.match(/^(\d+)\.\s+(.+)/);
+
+    if (bulletMatch) {
+      if (!inList) { result.push('<ul class="my-1.5 space-y-1 pl-4">'); inList = true; }
+      result.push(`<li class="list-disc text-sm">${bulletMatch[1]}</li>`);
+    } else if (numberedMatch) {
+      if (!inList) { result.push('<ol class="my-1.5 space-y-1 pl-4">'); inList = true; }
+      result.push(`<li class="list-decimal text-sm">${numberedMatch[2]}</li>`);
+    } else {
+      if (inList) { result.push(inList ? "</ul>" : "</ol>"); inList = false; }
+      if (line.trim() === "") {
+        result.push('<div class="h-2"></div>');
+      } else {
+        result.push(`<p class="text-sm leading-relaxed">${line}</p>`);
+      }
+    }
+  }
+  if (inList) result.push("</ul>");
+
+  return result.join("");
+}
+
+function MarkdownMessage({ content, isUser }: { content: string; isUser: boolean }) {
+  return (
+    <div
+      className={`text-sm leading-relaxed font-medium ${isUser ? "text-white" : "text-slate-700"}`}
+      dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
+    />
+  );
+}
 
 export function AIChat() {
   const { isConnected, address, connect, isConnecting } = useWallet();
@@ -84,7 +140,6 @@ export function AIChat() {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // ─── Parse AVAX amount from user message ──────────────────────────────────
   const parseAvaxAmount = (text: string): string => {
     const lower = text.toLowerCase();
     const avaxMatch = lower.match(/(\d+(?:\.\d+)?)\s*avax/);
@@ -112,10 +167,15 @@ export function AIChat() {
         ...chatMessages
       ]);
 
+      // Strip hanya JSON block dari content, sisakan teks biasa
+      const cleanContent = response
+        .replace(/```json[\s\S]*?```/g, "")
+        .trim();
+
       const newMsg: Message = {
         id: `ai-${Date.now()}`,
         role: "assistant",
-        content: response,
+        content: cleanContent || "Your smart contract is ready. Please review the receipt below and sign to deploy.",
       };
 
       const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/) || response.match(/\{[\s\S]*"action"\s*:\s*"DEPLOY_CONTRACT"[\s\S]*\}/);
@@ -126,7 +186,6 @@ export function AIChat() {
           if (actionData.action === "DEPLOY_CONTRACT") {
             const rawPreview = actionData.data as EscrowPreview;
 
-            // Pastikan deadline valid ISO date, fallback 30 hari dari sekarang
             let deadline = rawPreview.deadline;
             if (!deadline || isNaN(Date.parse(deadline))) {
               const fallback = new Date();
@@ -184,9 +243,7 @@ export function AIChat() {
     }
 
     if (avaxAmount > MAX_AVAX_TESTNET) {
-      toast.error(
-        `Budget ${avaxAmount} AVAX exceeds testnet limit of ${MAX_AVAX_TESTNET} AVAX. Please reduce your budget.`
-      );
+      toast.error(`Budget ${avaxAmount} AVAX exceeds testnet limit of ${MAX_AVAX_TESTNET} AVAX. Please reduce your budget.`);
       return;
     }
 
@@ -194,10 +251,7 @@ export function AIChat() {
     let deployToast = toast.loading("Initiating on-chain transaction...");
 
     try {
-      const { createProjectOnChain, CONTRACT_ADDRESS, CONTRACT_ABI } = await import("@/lib/contract");
-      const { ethers } = await import("ethers");
-
-      console.log(`Deploying project with budget: ${avaxAmount} AVAX, deadline: ${preview.deadline}`);
+      const { createProjectOnChain, CONTRACT_ADDRESS } = await import("@/lib/contract");
 
       const { hash: txHash, onChainId: realOnChainId } = await createProjectOnChain(
         CONTRACT_ADDRESS,
@@ -225,18 +279,28 @@ export function AIChat() {
         onChainId: realOnChainId,
         team: preview.team,
         riskLevel: preview.riskLevel,
-        duration: preview.deadline,   // kolom DB tetap "duration", isinya sekarang ISO date
+        duration: preview.deadline,
         techStack: (preview as any).techStack || [],
         aiAuditResult: ""
       });
 
       toast.success("Project live on Avalanche Fuji!", { id: deployToast });
 
+      // Custom deploy success message — rendered separately via deploySuccess flag
       setMessages((prev) => [...prev, {
         id: `deploy-${Date.now()}`,
         role: "system",
-        content: `**Project Created On-Chain!** 🚀\n\nProject ID: **#${realOnChainId}**\nBudget: **${avaxAmount} AVAX** (escrowed)\nDeadline: **${new Date(preview.deadline).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}**\nTransaction: [View on Explorer](${ACTIVE_NETWORK.blockExplorerUrl}/tx/${txHash})\n\nTokens have been escrowed. Talent can now find your job in the Board.`,
-      }]);
+        content: "deploy_success",
+        escrowPreview: undefined,
+        consultationData: undefined,
+        deployMeta: {
+          onChainId: realOnChainId,
+          avaxAmount: String(avaxAmount),
+          deadline: preview.deadline,
+          txHash,
+          explorerUrl: ACTIVE_NETWORK.blockExplorerUrl,
+        } as any,
+      } as any]);
     } catch (error: any) {
       toast.error("Transaction failed: " + error.message, { id: deployToast });
       setMessages((prev) => [...prev, {
@@ -290,13 +354,62 @@ export function AIChat() {
       >
         {messages.map((msg) => (
           <div key={msg.id} className={`flex gap-4 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-            <div className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border ${msg.role === "assistant" ? "bg-white border-slate-200 text-emerald-600" : "bg-slate-900 border-slate-900 text-white"}`}>
-              {msg.role === "assistant" ? <Bot className="h-5 w-5" /> : <User className="h-5 w-5" />}
-            </div>
-            <div className={`flex flex-col gap-3 max-w-[80%] ${msg.role === "user" ? "items-end" : ""}`}>
-              <div className={`p-4 rounded-2xl text-sm leading-relaxed font-medium ${msg.role === "user" ? "bg-emerald-600 text-white rounded-tr-none" : "bg-white border border-slate-100 text-slate-700 rounded-tl-none shadow-sm"}`}>
-                {msg.content}
+            {msg.role !== "system" && (
+              <div className={`h-10 w-10 shrink-0 rounded-xl flex items-center justify-center border ${msg.role === "assistant" ? "bg-white border-slate-200 text-emerald-600" : "bg-slate-900 border-slate-900 text-white"}`}>
+                {msg.role === "assistant" ? <Bot className="h-5 w-5" /> : <User className="h-5 w-5" />}
               </div>
+            )}
+            <div className={`flex flex-col gap-3 max-w-[80%] ${msg.role === "user" ? "items-end" : ""} ${msg.role === "system" ? "max-w-full w-full" : ""}`}>
+              {/* System messages — styled differently */}
+              {msg.role === "system" ? (
+                msg.deployMeta ? (
+                  // Deploy success card
+                  <div className="w-full rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+                      <span className="text-sm font-black text-slate-900 uppercase tracking-widest">Project Deployed Successfully</span>
+                    </div>
+                    <div className="px-5 py-4 space-y-3">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400 font-medium">Project ID</span>
+                        <span className="font-black text-slate-900">#{msg.deployMeta.onChainId}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400 font-medium">Budget Escrowed</span>
+                        <span className="font-black text-slate-900">{msg.deployMeta.avaxAmount} AVAX</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400 font-medium">Deadline</span>
+                        <span className="font-black text-slate-900">
+                          {new Date(msg.deployMeta.deadline).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                        </span>
+                      </div>
+                      <div className="pt-1 border-t border-slate-100">
+                        <a
+                          href={`${msg.deployMeta.explorerUrl}/tx/${msg.deployMeta.txHash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-between w-full text-sm text-emerald-600 hover:text-emerald-700 font-bold group"
+                        >
+                          <span>View Transaction on Explorer</span>
+                          <span className="text-slate-300 group-hover:text-emerald-500 transition-all">↗</span>
+                        </a>
+                      </div>
+                    </div>
+                    <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
+                      <p className="text-xs text-slate-400 font-medium">Your project is now live. Freelancers can find it on the Job Board.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full p-4 rounded-2xl bg-emerald-50 border border-emerald-100 text-sm text-emerald-900">
+                    <MarkdownMessage content={msg.content} isUser={false} />
+                  </div>
+                )
+              ) : (
+                <div className={`p-4 rounded-2xl ${msg.role === "user" ? "bg-emerald-600 text-white rounded-tr-none" : "bg-white border border-slate-100 text-slate-700 rounded-tl-none shadow-sm"}`}>
+                  <MarkdownMessage content={msg.content} isUser={msg.role === "user"} />
+                </div>
+              )}
 
               {msg.escrowPreview && (
                 <Card className="border-slate-200 bg-white shadow-xl rounded-2xl w-[360px] md:w-[400px] mt-2 font-mono text-sm overflow-hidden border">
@@ -315,7 +428,6 @@ export function AIChat() {
                       <span className="text-slate-500 min-w-[80px]">DESC:</span>
                       <span className="text-slate-900 text-[11px] text-right opacity-80 line-clamp-2 md:line-clamp-3 leading-relaxed mt-0.5">{msg.escrowPreview.description}</span>
                     </div>
-                    {/* Deadline — ganti dari DURATION */}
                     <div className="flex justify-between items-start gap-4">
                       <span className="text-slate-500 min-w-[80px]">DEADLINE:</span>
                       <span className="text-slate-900 font-medium text-right uppercase">
@@ -389,7 +501,6 @@ export function AIChat() {
                   </div>
                 </Card>
               )}
-
             </div>
           </div>
         ))}

@@ -1,5 +1,6 @@
 import { type EscrowContract, type Milestone } from "./kite-config";
 import { supabase } from "./supabase";
+import { createNotification } from "./chat-notif-store";
 
 // In-memory store that syncs with Supabase
 let escrows: EscrowContract[] = [];
@@ -46,17 +47,8 @@ export async function reloadEscrows() {
   await load();
 }
 
-supabase
-  .channel("escrows-realtime")
-  .on(
-    "postgres_changes",
-    { event: "*", schema: "public", table: "escrows" },
-    async () => {
-      await load();
-    }
-  )
-  .subscribe();
-
+// Load once on module init — no realtime subscription
+// Realtime dihandle manual via reloadEscrows() setelah setiap action
 load();
 
 function notify() {
@@ -149,6 +141,25 @@ export async function updateMilestoneStatus(
   notify();
 
   if (!updatedEscrow) return;
+
+  // Trigger notifications
+  const finalEscrow = updatedEscrow as EscrowContract;
+  if (status === "submitted" && finalEscrow.employer) {
+    await createNotification({
+      recipient: finalEscrow.employer,
+      escrowId,
+      type: "work_submitted",
+      message: `📦 Freelancer submitted work for "${finalEscrow.title}". Review and approve payment.`,
+    });
+  }
+  if (status === "completed" && finalEscrow.worker) {
+    await createNotification({
+      recipient: finalEscrow.worker,
+      escrowId,
+      type: "payment_released",
+      message: `💰 Payment released for "${finalEscrow.title}"! Check your wallet.`,
+    });
+  }
 
   // Step 1: Update milestones JSON + status
   const milestonesPayload = (updatedEscrow as EscrowContract).milestones;
@@ -364,6 +375,34 @@ export async function updateEscrow(
 export async function checkAndExpireEscrows(): Promise<void> {
   const now = new Date();
 
+  // Notif deadline soon (3 hari sebelum) — hanya sekali, cek by escrow
+  const soonThreshold = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const soonEscrows = escrows.filter((e) => {
+    if (!e.deadline) return false;
+    if (e.status === "completed" || e.status === "cancelled") return false;
+    const dl = new Date(e.deadline);
+    return dl > now && dl <= soonThreshold;
+  });
+  for (const e of soonEscrows) {
+    const daysLeft = Math.ceil((new Date(e.deadline!).getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (e.employer) {
+      await createNotification({
+        recipient: e.employer,
+        escrowId: e.id,
+        type: "deadline_soon",
+        message: `⏰ "${e.title}" deadline is in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}. Take action if needed.`,
+      });
+    }
+    if (e.worker) {
+      await createNotification({
+        recipient: e.worker,
+        escrowId: e.id,
+        type: "deadline_soon",
+        message: `⏰ Deadline for "${e.title}" is in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}. Submit your work soon!`,
+      });
+    }
+  }
+
   const expired = escrows.filter((e) => {
     if (!e.deadline) return false;
     if (e.status === "completed" || e.status === "cancelled") return false;
@@ -459,17 +498,89 @@ export async function submitProposal(
     return { success: false, error: error.message };
   }
 
+  // Notif ke employer
+  const escrow = escrows.find((e) => e.id === escrowId);
+  if (escrow?.employer) {
+    await createNotification({
+      recipient: escrow.employer,
+      escrowId,
+      type: "proposal_received",
+      message: `New proposal received for "${escrow.title}" from ${freelancer.slice(0, 6)}...${freelancer.slice(-4)}`,
+    });
+  }
+
   return { success: true };
 }
 
 export async function updateProposalStatus(
   proposalId: string,
-  status: "pending" | "accepted" | "rejected"
+  status: "pending" | "accepted" | "rejected",
+  freelancerAddress?: string,
+  escrowId?: string
 ): Promise<void> {
   const { error } = await supabase
     .from("proposals")
     .update({ status })
     .eq("id", proposalId);
 
-  if (error) console.error("Proposal status update error:", error.code, error.message);
+  if (error) { console.error("Proposal status update error:", error.code, error.message); return; }
+
+  if (freelancerAddress && escrowId && status !== "pending") {
+    const escrow = escrows.find((e) => e.id === escrowId);
+    await createNotification({
+      recipient: freelancerAddress,
+      escrowId,
+      type: status === "accepted" ? "proposal_accepted" : "proposal_rejected",
+      message: status === "accepted"
+        ? `🎉 Your proposal for "${escrow?.title ?? "a project"}" was accepted! Check your dashboard.`
+        : `Your proposal for "${escrow?.title ?? "a project"}" was not selected this time.`,
+    });
+  }
+}
+
+// ─── Get proposals by freelancer ──────────────────────────────────────────────
+export async function getProposalsByFreelancer(freelancerAddress: string): Promise<any[]> {
+  const { data, error } = await supabase
+    .from("proposals")
+    .select("*, escrows(id, title, description, status, total_amount, employer)")
+    .eq("freelancer", freelancerAddress.toLowerCase())
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Failed to fetch freelancer proposals:", error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+// ─── Cancel proposal (only if still pending / not hired) ─────────────────────
+export async function cancelProposal(
+  proposalId: string
+): Promise<{ success: boolean; error?: string }> {
+  // Cek dulu status proposal — tidak boleh cancel kalau sudah accepted
+  const { data: proposal, error: fetchErr } = await supabase
+    .from("proposals")
+    .select("status")
+    .eq("id", proposalId)
+    .maybeSingle();  // pakai maybeSingle agar tidak error kalau tidak ketemu
+
+  if (fetchErr) {
+    console.error("cancelProposal fetch error:", fetchErr.message);
+    return { success: false, error: fetchErr.message };
+  }
+  if (!proposal) return { success: false, error: "Proposal not found" };
+  if (proposal.status === "accepted") return { success: false, error: "Cannot withdraw — you have already been hired for this project." };
+
+  const { error } = await supabase
+    .from("proposals")
+    .delete()
+    .eq("id", proposalId);
+
+  if (error) {
+    console.error("cancelProposal delete error:", error.message, error.code);
+    // Cek apakah RLS yang block
+    if (error.code === "42501") return { success: false, error: "Permission denied — RLS policy belum diset. Jalankan migration_proposals_rls.sql di Supabase." };
+    return { success: false, error: error.message };
+  }
+  return { success: true };
 }

@@ -28,6 +28,8 @@ import {
   Bell,
   MessageSquare,
 } from "lucide-react";
+import { ChatPanel } from "@/components/chat-panel";
+import { NotificationsPanel, useUnreadCount } from "@/components/notifications-panel";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -44,6 +46,10 @@ export function Navbar() {
   } = useWallet();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+
+  const unreadCount = useUnreadCount(address ?? null);
 
   const handleCopy = () => {
     if (address) {
@@ -54,7 +60,7 @@ export function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur-xl overflow-visible">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 lg:px-8">
         {/* Logo */}
         <Link href="/" className="flex items-center group">
@@ -72,7 +78,6 @@ export function Navbar() {
             { href: "/", label: "Home" },
             { href: "/chat", label: "Consult Assistant" },
             { href: "/jobs", label: "Job Board" },
-            { href: "/dashboard", label: "Dashboard" },
           ].map((link) => (
             <Link
               key={link.href}
@@ -89,7 +94,7 @@ export function Navbar() {
 
         {/* Right Section */}
         <div className="flex items-center gap-6">
-          <div className="hidden items-center gap-6 md:flex">
+          <div className="hidden items-center gap-3 md:flex">
             {!isCorrectChain && isConnected && (
               <Button
                 variant="destructive"
@@ -101,14 +106,38 @@ export function Navbar() {
                 Switch to {ACTIVE_NETWORK.chainName}
               </Button>
             )}
-            <button className="text-slate-500 hover:text-slate-900 transition-colors">
-              <Bell className="h-5 w-5" />
-            </button>
-            <button className="text-slate-500 hover:text-slate-900 transition-colors">
-              <MessageSquare className="h-5 w-5" />
-            </button>
+
+            {/* Chat Button */}
+            <div className="relative" style={{ zIndex: 50 }}>
+              <button
+                onClick={() => { setShowChat(v => !v); setShowNotifs(false); }}
+                className="relative h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-all"
+                title="Messages"
+              >
+                <MessageSquare className="h-5 w-5" />
+              </button>
+              {showChat && <ChatPanel onClose={() => setShowChat(false)} />}
+            </div>
+
+            {/* Notification Bell */}
+            <div className="relative" style={{ zIndex: 50 }}>
+              <button
+                onClick={() => { setShowNotifs(v => !v); setShowChat(false); }}
+                className="relative h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-all"
+                title="Notifications"
+              >
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-emerald-500 text-white text-[9px] font-black flex items-center justify-center">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
+              {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} />}
+            </div>
+
             <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 overflow-hidden cursor-pointer hover:border-emerald-500 transition-all">
-              {/* Placeholder for Avatar */}
+              {/* Avatar placeholder */}
             </div>
           </div>
 
@@ -178,7 +207,6 @@ export function Navbar() {
                 { href: "/", label: "Home" },
                 { href: "/chat", label: "Consult Assistant" },
                 { href: "/jobs", label: "Job Board" },
-                { href: "/dashboard", label: "Dashboard" },
               ].map((link) => (
                 <Link
                   key={link.href}
@@ -234,6 +262,9 @@ export function Navbar() {
           </div>
         </div>
       )}
+
+      {/* Chat & Notification Panels */}
+
     </header>
   );
 }
