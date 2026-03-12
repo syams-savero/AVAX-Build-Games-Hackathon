@@ -82,14 +82,20 @@ export async function sendMessage(
     content: string,
     escrowId: string | null = null
 ): Promise<{ success: boolean; error?: string }> {
-    const { error } = await supabase.from("messages").insert({
+    const payload = {
         id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         escrow_id: escrowId,
-        sender,
+        sender: sender.toLowerCase(),
         content,
         created_at: new Date().toISOString(),
-    });
-    if (error) return { success: false, error: error.message };
+    };
+    console.log("[sendMessage] inserting:", payload);
+    const { error } = await supabase.from("messages").insert(payload);
+    if (error) {
+        console.error("[sendMessage] error:", error.message, error.details, error.hint);
+        return { success: false, error: error.message };
+    }
+    console.log("[sendMessage] success");
     return { success: true };
 }
 
@@ -205,4 +211,111 @@ export function subscribeToNotifications(
         .subscribe();
 
     return () => { supabase.removeChannel(channel); };
+}
+
+// ─── Direct Messages ──────────────────────────────────────────────────────────
+
+// Strip 0x and lowercase for compact room IDs
+function stripAddr(addr: string): string {
+    return addr.toLowerCase().replace(/^0x/, "");
+}
+
+// Generate consistent DM room ID — format: dm_{shorter}_{longer} (sorted)
+export function getDmRoomId(a: string, b: string): string {
+    const sorted = [stripAddr(a), stripAddr(b)].sort();
+    return `dm_${sorted[0]}_${sorted[1]}`;
+}
+
+// Reconstruct full address from stripped version
+function restoreAddr(stripped: string): string {
+    return stripped.startsWith("0x") ? stripped : "0x" + stripped;
+}
+
+// Get all DM conversations for an address
+export async function getDmConversations(address: string): Promise<{
+    roomId: string;
+    otherAddress: string;
+    lastMessage: ChatMessage | null;
+}[]> {
+    const stripped = stripAddr(address);
+
+    // Fetch all DM messages involving this address using LIKE on escrow_id
+    const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .like("escrow_id", `%${stripped}%`)
+        .order("created_at", { ascending: false });
+
+    if (error) { console.error("getDmConversations error:", error.message); return []; }
+    if (!data) return [];
+
+    // Group by roomId — only keep DM rooms
+    const rooms = new Map<string, ChatMessage>();
+    for (const row of data) {
+        const roomId = row.escrow_id as string;
+        if (!roomId?.startsWith("dm_")) continue;
+        if (!roomId.includes(stripped)) continue;
+        if (!rooms.has(roomId)) {
+            rooms.set(roomId, mapMessage(row));
+        }
+    }
+
+    return Array.from(rooms.entries()).map(([roomId, lastMessage]) => {
+        // roomId format: dm_{addr1}_{addr2} where each addr is 40 hex chars (no 0x)
+        const withoutPrefix = roomId.slice(3); // remove "dm_"
+        // Each stripped address is exactly 40 hex chars
+        const addrA = withoutPrefix.slice(0, 40);
+        const addrB = withoutPrefix.slice(41); // skip the "_"
+        const otherStripped = addrA === stripped ? addrB : addrA;
+        return { roomId, otherAddress: restoreAddr(otherStripped), lastMessage };
+    });
+}
+
+export async function getDmMessages(roomId: string): Promise<ChatMessage[]> {
+    const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("escrow_id", roomId)
+        .order("created_at", { ascending: true })
+        .limit(100);
+
+    if (error) { console.error("getDmMessages error:", error.message); return []; }
+    return (data ?? []).map(mapMessage);
+}
+
+export async function sendDmMessage(
+    from: string,
+    to: string,
+    content: string
+): Promise<{ success: boolean; error?: string }> {
+    const roomId = getDmRoomId(from, to);
+    return sendMessage(from, content, roomId);
+}
+
+export function subscribeToDm(
+    roomId: string,
+    onNew: (msg: ChatMessage) => void
+): () => void {
+    const channel = supabase
+        .channel(`dm:${roomId}:${Date.now()}`)
+        .on("postgres_changes", {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `escrow_id=eq.${roomId}`,
+        }, (payload) => {
+            onNew(mapMessage(payload.new));
+        })
+        .subscribe();
+    return () => { supabase.removeChannel(channel); };
+}
+
+// Delete all messages in a conversation (DM or project)
+export async function deleteConversation(escrowId: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase
+        .from("messages")
+        .delete()
+        .eq("escrow_id", escrowId);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
 }

@@ -34,7 +34,6 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
   Wallet,
-  ExternalLink,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -47,16 +46,16 @@ import {
   ShieldCheck,
   TrendingUp,
   Loader2,
-  Pencil,
   Trash2,
   X,
   Calendar,
   Lock,
   Info,
-  AlertTriangle
+  AlertTriangle,
+  Pencil,
+  ExternalLink
 } from "lucide-react";
 import Link from "next/link";
-import { getProfile, upsertProfile, type Profile } from "@/lib/profile-store";
 
 function getStatusConfig(status: EscrowStatus) {
   const configs: Record<
@@ -1181,269 +1180,7 @@ function EscrowCard({
 
 
 
-// ─── Edit Profile Modal ────────────────────────────────────────────────────────
-function EditProfileModal({
-  address,
-  onClose,
-  onSave,
-}: {
-  address: string;
-  onClose: () => void;
-  onSave: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [bio, setBio] = useState("");
-  const [skillInput, setSkillInput] = useState("");
-  const [skills, setSkills] = useState<string[]>([]);
-  const [github, setGithub] = useState("");
-  const [twitter, setTwitter] = useState("");
-  const [portfolio, setPortfolio] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    getProfile(address).then((prof) => {
-      if (prof) {
-        setName(prof.name);
-        setBio(prof.bio);
-        setSkills(prof.skills);
-        setGithub(prof.githubUrl);
-        setTwitter(prof.twitterUrl);
-        setPortfolio(prof.portfolioUrl);
-      }
-      setIsLoading(false);
-    });
-  }, [address]);
-
-  const addSkill = () => {
-    const s = skillInput.trim();
-    if (s && !skills.includes(s) && skills.length < 10) {
-      setSkills([...skills, s]);
-      setSkillInput("");
-    }
-  };
-
-  const removeSkill = (s: string) => setSkills(skills.filter((sk) => sk !== s));
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    const result = await upsertProfile(address, { name, bio, skills, githubUrl: github, twitterUrl: twitter, portfolioUrl: portfolio });
-    if (result.success) {
-      toast.success("Profile updated!");
-      onSave();
-      onClose();
-    } else {
-      toast.error(result.error ?? "Failed to save profile");
-    }
-    setIsSaving(false);
-  };
-
-  return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-md mx-4 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-black text-slate-900 uppercase tracking-tight">Edit Profile</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
-        </div>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
-        ) : (
-          <div className="space-y-4">
-            {/* Name */}
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Display Name</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Alex the Builder" className="mt-1 rounded-xl border-slate-200 text-sm" disabled={isSaving} maxLength={50} />
-            </div>
-
-            {/* Bio */}
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bio</label>
-              <textarea
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                placeholder="Solidity dev, DeFi enthusiast, 3 years on-chain..."
-                rows={3}
-                maxLength={300}
-                disabled={isSaving}
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
-              />
-              <p className="text-[10px] text-slate-300 text-right mt-0.5">{bio.length}/300</p>
-            </div>
-
-            {/* Skills */}
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Skills</label>
-              <div className="flex gap-2 mt-1">
-                <Input
-                  value={skillInput}
-                  onChange={(e) => setSkillInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSkill())}
-                  placeholder="e.g. Solidity, React, Next.js..."
-                  className="rounded-xl border-slate-200 text-sm h-9"
-                  disabled={isSaving}
-                />
-                <Button onClick={addSkill} disabled={!skillInput.trim() || skills.length >= 10} size="sm"
-                  className="h-9 px-4 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white font-black text-xs">
-                  Add
-                </Button>
-              </div>
-              {skills.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {skills.map((s) => (
-                    <span key={s} className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700">
-                      {s}
-                      <button onClick={() => removeSkill(s)} className="text-slate-400 hover:text-red-500 transition-colors">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Social links */}
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Social Links</label>
-              <Input value={github} onChange={(e) => setGithub(e.target.value)} placeholder="https://github.com/username" className="rounded-xl border-slate-200 text-sm h-9" disabled={isSaving} />
-              <Input value={twitter} onChange={(e) => setTwitter(e.target.value)} placeholder="https://twitter.com/username" className="rounded-xl border-slate-200 text-sm h-9" disabled={isSaving} />
-              <Input value={portfolio} onChange={(e) => setPortfolio(e.target.value)} placeholder="https://yourportfolio.com" className="rounded-xl border-slate-200 text-sm h-9" disabled={isSaving} />
-            </div>
-          </div>
-        )}
-
-        <div className="flex gap-2 pt-1">
-          <Button variant="outline" onClick={onClose} disabled={isSaving} className="flex-1 rounded-xl font-black text-[10px] uppercase h-11">Cancel</Button>
-          <Button onClick={handleSave} disabled={isSaving || isLoading} className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase h-11">
-            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save Profile"}
-          </Button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-// ─── Freelancer Profile Section ───────────────────────────────────────────────
-function FreelancerProfile({ address, escrows }: { address: string; escrows: EscrowContract[] }) {
-  const myGigs = escrows.filter((e) => e.worker?.toLowerCase() === address.toLowerCase());
-  const completed = myGigs.filter((e) => e.status === "completed");
-  const totalEarned = completed.reduce((acc, e) => acc + parseFloat(e.totalAmount || "0"), 0);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [profileName, setProfileName] = useState("");
-
-  useEffect(() => {
-    getProfile(address).then((p) => { if (p?.name) setProfileName(p.name); });
-  }, [address]);
-
-  // Trust Score — weighted formula:
-  // 60% completion rate (completed / total gigs)
-  // 25% AI audit pass rate (gigs with PASS audit / completed gigs)
-  // 15% activity bonus (capped at 15 for 3+ jobs)
-  const completionRate = myGigs.length > 0 ? completed.length / myGigs.length : 0;
-  const auditPassCount = completed.filter((e) => e.aiAuditResult?.includes("PASS")).length;
-  const auditPassRate = completed.length > 0 ? auditPassCount / completed.length : 0;
-  const activityBonus = Math.min(15, myGigs.length * 5);
-  const trustScore = myGigs.length === 0 ? 0
-    : Math.min(100, Math.round(completionRate * 60 + auditPassRate * 25 + activityBonus));
-
-  const trustLabel = trustScore >= 80 ? "Elite" : trustScore >= 60 ? "Trusted" : trustScore >= 30 ? "Rising" : "New";
-  const trustColor = trustScore >= 80 ? "text-emerald-600 bg-emerald-50 border-emerald-200"
-    : trustScore >= 60 ? "text-blue-600 bg-blue-50 border-blue-200"
-      : trustScore >= 30 ? "text-amber-600 bg-amber-50 border-amber-200"
-        : "text-slate-500 bg-slate-50 border-slate-200";
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-3xl p-6 mt-8">
-      <div className="flex flex-col md:flex-row md:items-center gap-5">
-        {/* Avatar */}
-        <div className="relative shrink-0">
-          <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center">
-            <span className="text-lg font-black text-slate-600">
-              {address.slice(2, 4).toUpperCase()}
-            </span>
-          </div>
-          <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white" />
-        </div>
-
-        {/* Identity */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-black text-slate-900">
-              {profileName || `${address.slice(0, 6)}...${address.slice(-4)}`}
-            </p>
-            <span className={`px-2 py-0.5 rounded-lg border text-[9px] font-black uppercase tracking-widest ${trustColor}`}>
-              {trustLabel}
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 font-mono mt-0.5">{address.slice(0, 6)}...{address.slice(-4)} · Avalanche Fuji</p>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
-          <Link href={`/profile/${address}`} target="_blank"
-            className="flex items-center gap-1.5 h-8 px-3 rounded-xl border border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700 text-[10px] font-black uppercase tracking-widest transition-all">
-            <ExternalLink className="h-3 w-3" /> View
-          </Link>
-          <button
-            onClick={() => setShowEditModal(true)}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-xl border border-slate-200 text-slate-500 hover:border-emerald-300 hover:text-emerald-600 hover:bg-emerald-50 text-[10px] font-black uppercase tracking-widest transition-all">
-            <Pencil className="h-3 w-3" /> Edit
-          </button>
-        </div>
-
-        {/* Stats */}
-        <div className="flex items-center gap-6 shrink-0">
-          <div className="text-center">
-            <p className="text-lg font-black text-slate-900">{totalEarned.toFixed(3)}</p>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">AVAX Earned</p>
-          </div>
-          <div className="w-px h-8 bg-slate-100" />
-          <div className="text-center">
-            <p className="text-lg font-black text-slate-900">{completed.length}<span className="text-xs font-bold text-slate-400 ml-0.5">/{myGigs.length}</span></p>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Completed</p>
-          </div>
-          <div className="w-px h-8 bg-slate-100" />
-          <div className="text-center">
-            <p className="text-lg font-black text-slate-900">{trustScore}<span className="text-xs font-bold text-slate-400 ml-0.5">/100</span></p>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Trust Score</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Trust bar — only if has gigs */}
-      {myGigs.length > 0 && (
-        <div className="mt-5 pt-4 border-t border-slate-100 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Trust Score</span>
-            <span className="text-[10px] font-black text-slate-600">{trustScore}/100</span>
-          </div>
-          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-emerald-500 rounded-full transition-all duration-700"
-              style={{ width: `${trustScore}%` }}
-            />
-          </div>
-          <p className="text-[10px] text-slate-400">
-            {trustScore === 0 ? "Complete your first job to start building your score."
-              : trustScore < 30 ? "Keep completing jobs to build your reputation."
-                : trustScore < 60 ? "Rising reputation — AI-audited completions boost your score."
-                  : trustScore < 80 ? "Strong track record. Employers will notice you."
-                    : "Top-tier freelancer — employers trust you on-chain."}
-          </p>
-        </div>
-      )}
-
-      {showEditModal && (
-        <EditProfileModal
-          address={address}
-          onClose={() => setShowEditModal(false)}
-          onSave={() => getProfile(address).then((p) => { if (p?.name) setProfileName(p.name); })}
-        />
-      )}
-    </div>
-  );
-}
 
 // ─── My Applications Section (Freelancer Tab) ────────────────────────────────
 function MyApplicationsSection({ address, onUpdate }: { address: string; onUpdate: () => void }) {
@@ -1747,12 +1484,26 @@ export function EscrowDashboard() {
         ))}
       </div>
 
-      {/* Freelancer Profile — muncul di atas Available Work Gigs */}
+      {/* Freelancer profile prompt */}
       {activeTab === "freelancer" && address && (
-        <FreelancerProfile address={address} escrows={escrows} />
+        <div className="flex items-center justify-between bg-white border border-slate-200 rounded-2xl px-5 py-3 mt-6">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+              <span className="text-xs font-black text-slate-600">{address.slice(2, 4).toUpperCase()}</span>
+            </div>
+            <div>
+              <p className="text-xs font-black text-slate-700">Your Freelancer Profile</p>
+              <p className="text-[10px] text-slate-400">Add bio, skills & social links to stand out</p>
+            </div>
+          </div>
+          <Link href="/profile/me"
+            className="flex items-center gap-1.5 h-8 px-4 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest transition-all">
+            Edit Profile
+          </Link>
+        </div>
       )}
 
-      <div className="space-y-6 mt-12 bg-white/50 border border-slate-100 rounded-[40px] p-6 backdrop-blur-sm">
+      <div className="space-y-6 mt-4 bg-white/50 border border-slate-100 rounded-[40px] p-6 backdrop-blur-sm">
         <div className="flex items-center justify-between px-4">
           <h2 className="text-xl font-black text-slate-900 tracking-tight">
             {activeTab === "employer" ? "My Global Hires" : "Available Work Gigs"}

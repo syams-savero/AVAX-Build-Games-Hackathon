@@ -27,8 +27,8 @@ import {
   Check,
   Bell,
   MessageSquare,
+  UserCircle,
 } from "lucide-react";
-import { ChatPanel } from "@/components/chat-panel";
 import { NotificationsPanel, useUnreadCount } from "@/components/notifications-panel";
 
 export function Navbar() {
@@ -47,7 +47,6 @@ export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showNotifs, setShowNotifs] = useState(false);
-  const [showChat, setShowChat] = useState(false);
 
   const unreadCount = useUnreadCount(address ?? null);
 
@@ -107,22 +106,10 @@ export function Navbar() {
               </Button>
             )}
 
-            {/* Chat Button */}
-            <div className="relative" style={{ zIndex: 50 }}>
-              <button
-                onClick={() => { setShowChat(v => !v); setShowNotifs(false); }}
-                className="relative h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-all"
-                title="Messages"
-              >
-                <MessageSquare className="h-5 w-5" />
-              </button>
-              {showChat && <ChatPanel onClose={() => setShowChat(false)} />}
-            </div>
-
             {/* Notification Bell */}
             <div className="relative" style={{ zIndex: 50 }}>
               <button
-                onClick={() => { setShowNotifs(v => !v); setShowChat(false); }}
+                onClick={() => { setShowNotifs(v => !v); }}
                 className="relative h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-all"
                 title="Notifications"
               >
@@ -135,6 +122,14 @@ export function Navbar() {
               </button>
               {showNotifs && <NotificationsPanel onClose={() => setShowNotifs(false)} />}
             </div>
+
+            {/* Chat Button → /messages */}
+            <Link href="/messages"
+              className="relative h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-all"
+              title="Messages"
+            >
+              <MessageSquare className="h-5 w-5" />
+            </Link>
 
             <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 overflow-hidden cursor-pointer hover:border-emerald-500 transition-all">
               {/* Avatar placeholder */}
@@ -158,6 +153,12 @@ export function Navbar() {
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Balance</p>
                     <p className="text-lg font-black text-slate-900">{balance} {ACTIVE_NETWORK.nativeCurrency.symbol}</p>
                   </div>
+                  <Link href="/profile/me" className="block">
+                    <DropdownMenuItem className="rounded-xl h-11 font-bold text-slate-600 focus:text-emerald-600 focus:bg-emerald-50 cursor-pointer gap-2">
+                      <UserCircle className="h-4 w-4" />
+                      My Profile
+                    </DropdownMenuItem>
+                  </Link>
                   <Link href="/dashboard" className="block">
                     <DropdownMenuItem className="rounded-xl h-11 font-bold text-slate-600 focus:text-emerald-600 focus:bg-emerald-50 cursor-pointer gap-2">
                       <TrendingUp className="h-4 w-4" />

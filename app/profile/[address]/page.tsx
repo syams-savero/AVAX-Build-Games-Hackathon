@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import { useWallet } from "@/lib/wallet-context";
 import { getProfile, type Profile } from "@/lib/profile-store";
 import { getEscrows, reloadEscrows } from "@/lib/escrow-store";
 import { shortenAddress, ACTIVE_NETWORK } from "@/lib/kite-config";
@@ -10,7 +11,7 @@ import type { EscrowContract } from "@/lib/kite-config";
 import {
     ExternalLink, Github, Twitter, Globe, ShieldCheck,
     Briefcase, ArrowLeft, Loader2, Wallet, TrendingUp,
-    CheckCircle2, Clock, Users
+    CheckCircle2, Clock, Users, MessageSquare
 } from "lucide-react";
 import Link from "next/link";
 
@@ -52,6 +53,8 @@ function StatBox({ label, value, unit }: { label: string; value: string | number
 export default function ProfilePage() {
     const params = useParams();
     const address = (params?.address as string ?? "").toLowerCase();
+    const { address: connectedAddress } = useWallet();
+    const isOwnProfile = connectedAddress?.toLowerCase() === address;
 
     const [profile, setProfile] = useState<Profile | null>(null);
     const [escrows, setEscrows] = useState<EscrowContract[]>([]);
@@ -151,6 +154,21 @@ export default function ProfilePage() {
                 {profile?.bio && (
                     <p className="text-sm text-slate-600 leading-relaxed">{profile.bio}</p>
                 )}
+
+                {/* Actions */}
+                <div className="flex items-center gap-2 pt-1">
+                    {isOwnProfile ? (
+                        <Link href="/profile/me"
+                            className="flex items-center gap-1.5 h-8 px-4 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest transition-all">
+                            Edit Profile
+                        </Link>
+                    ) : (
+                        <Link href={`/messages?dm=${address}`}
+                            className="flex items-center gap-1.5 h-8 px-4 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest transition-all">
+                            <MessageSquare className="h-3.5 w-3.5" /> Message
+                        </Link>
+                    )}
+                </div>
 
                 {/* Skills */}
                 {profile?.skills && profile.skills.length > 0 && (
