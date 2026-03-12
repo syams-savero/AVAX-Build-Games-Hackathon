@@ -1,7 +1,7 @@
 // app/messages/page.tsx
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useWallet } from "@/lib/wallet-context";
 import {
@@ -421,7 +421,7 @@ function NewDmModal({ onStart, onClose }: { onStart: (addr: string) => void; onC
 }
 
 // ─── Messages Page ────────────────────────────────────────────────────────────
-export default function MessagesPage() {
+function MessagesPageInner() {
     const { address, isConnected } = useWallet();
     const searchParams = useSearchParams();
 
@@ -525,5 +525,17 @@ export default function MessagesPage() {
                 />
             )}
         </div>
+    );
+}
+
+export default function MessagesPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex h-[calc(100vh-65px)] items-center justify-center">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+            </div>
+        }>
+            <MessagesPageInner />
+        </Suspense>
     );
 }
