@@ -14,6 +14,9 @@ export interface ChatMessage {
     sender: string;
     content: string;
     createdAt: string;
+    edited?: boolean;
+    deleted?: boolean;
+    originalContent?: string | null;
 }
 
 // Alias for backward compat
@@ -46,6 +49,9 @@ function mapMessage(row: any): ChatMessage {
         sender: row.sender,
         content: row.content,
         createdAt: row.created_at,
+        edited: row.edited ?? false,
+        deleted: row.deleted ?? false,
+        originalContent: row.original_content ?? null,
     };
 }
 
@@ -213,6 +219,32 @@ export function subscribeToNotifications(
     return () => { supabase.removeChannel(channel); };
 }
 
+// ─── Message Actions ──────────────────────────────────────────────────────────
+
+export async function editMessage(
+    messageId: string,
+    newContent: string
+): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase
+        .from("messages")
+        .update({ content: newContent, edited: true })
+        .eq("id", messageId);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+}
+
+export async function deleteMessage(
+    messageId: string
+): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase
+        .from("messages")
+        .update({ deleted: true, content: "This message was deleted." })
+        .eq("id", messageId);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+}
+
+
 // ─── Direct Messages ──────────────────────────────────────────────────────────
 
 // Strip 0x and lowercase for compact room IDs
@@ -249,12 +281,17 @@ export async function getDmConversations(address: string): Promise<{
     if (error) { console.error("getDmConversations error:", error.message); return []; }
     if (!data) return [];
 
-    // Group by roomId — only keep DM rooms
+    // Get hidden rooms for this user
+    const hiddenRooms = await getHiddenDmRooms(address);
+    const hiddenSet = new Set(hiddenRooms);
+
+    // Group by roomId — only keep DM rooms, exclude hidden
     const rooms = new Map<string, ChatMessage>();
     for (const row of data) {
         const roomId = row.escrow_id as string;
         if (!roomId?.startsWith("dm_")) continue;
         if (!roomId.includes(stripped)) continue;
+        if (hiddenSet.has(roomId)) continue;
         if (!rooms.has(roomId)) {
             rooms.set(roomId, mapMessage(row));
         }
@@ -310,12 +347,130 @@ export function subscribeToDm(
     return () => { supabase.removeChannel(channel); };
 }
 
-// Delete all messages in a conversation (DM or project)
+// Hide a DM conversation for a specific user (persists across refresh)
+export async function hideDmConversation(
+    address: string,
+    roomId: string
+): Promise<{ success: boolean; error?: string }> {
+    // 1. Delete all messages in the room
+    const { error: delError } = await supabase
+        .from("messages")
+        .delete()
+        .eq("escrow_id", roomId);
+    if (delError) console.warn("[hideDm] delete messages error:", delError.message);
+
+    // 2. Mark as hidden for this user so it doesn't reappear
+    const { error: hideError } = await supabase
+        .from("dm_hidden")
+        .upsert({ address: address.toLowerCase(), room_id: roomId }, { onConflict: "address,room_id" });
+    if (hideError) return { success: false, error: hideError.message };
+
+    return { success: true };
+}
+
+// Get list of hidden room IDs for an address
+export async function getHiddenDmRooms(address: string): Promise<string[]> {
+    const { data, error } = await supabase
+        .from("dm_hidden")
+        .select("room_id")
+        .eq("address", address.toLowerCase());
+    if (error || !data) return [];
+    return data.map((r) => r.room_id);
+}
+
+// Legacy alias
 export async function deleteConversation(escrowId: string): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase.from("messages").delete().eq("escrow_id", escrowId);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+}
+
+// ─── Unread / Chat Notifications ─────────────────────────────────────────────
+
+export interface UnreadCount {
+    roomId: string | null; // null = global
+    count: number;
+}
+
+// Get messages after a timestamp (for unread detection)
+export async function getUnreadMessages(
+    roomId: string | null,
+    since: string // ISO timestamp
+): Promise<ChatMessage[]> {
+    let query = supabase
+        .from("messages")
+        .select("*")
+        .gt("created_at", since)
+        .eq("deleted", false)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+    if (roomId === null) {
+        query = query.is("escrow_id", null);
+    } else {
+        query = query.eq("escrow_id", roomId);
+    }
+
+    const { data, error } = await query;
+    if (error || !data) return [];
+    return data.map(mapMessage);
+}
+
+// Subscribe to ALL messages for a user's rooms and fire callback with room info
+export function subscribeToAllRooms(
+    rooms: (string | null)[], // null = global
+    onMessage: (msg: ChatMessage, roomId: string | null) => void
+): () => void {
+    const channels = rooms.map((roomId) => {
+        const channelName = `allrooms:${roomId ?? "global"}:${Date.now()}`;
+        const channel = supabase
+            .channel(channelName)
+            .on("postgres_changes", {
+                event: "INSERT",
+                schema: "public",
+                table: "messages",
+                ...(roomId !== null ? { filter: `escrow_id=eq.${roomId}` } : {}),
+            }, (payload) => {
+                const msg = mapMessage(payload.new);
+                // For global, filter client-side
+                if (roomId === null && msg.escrowId !== null) return;
+                onMessage(msg, roomId);
+            })
+            .subscribe();
+        return channel;
+    });
+
+    return () => { channels.forEach((ch) => supabase.removeChannel(ch)); };
+}
+
+// Permanently remove message from database (no trace)
+export async function hardDeleteMessage(
+    messageId: string
+): Promise<{ success: boolean; error?: string }> {
     const { error } = await supabase
         .from("messages")
         .delete()
-        .eq("escrow_id", escrowId);
+        .eq("id", messageId);
     if (error) return { success: false, error: error.message };
     return { success: true };
+}
+
+// Listen for hard-deleted messages to show placeholder in UI
+export function supabaseDeleteListener(
+    escrowId: string | null,
+    onDeleted: (msgId: string) => void
+): () => void {
+    const channelName = `del:${escrowId ?? "global"}:${Date.now()}`;
+    const channel = supabase
+        .channel(channelName)
+        .on("postgres_changes", {
+            event: "DELETE",
+            schema: "public",
+            table: "messages",
+            ...(escrowId !== null ? { filter: `escrow_id=eq.${escrowId}` } : {}),
+        }, (payload) => {
+            if (payload.old?.id) onDeleted(payload.old.id);
+        })
+        .subscribe();
+    return () => { supabase.removeChannel(channel); };
 }

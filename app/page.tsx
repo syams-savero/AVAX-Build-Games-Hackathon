@@ -29,6 +29,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { getEscrows, subscribe, reloadEscrows } from "@/lib/escrow-store";
+import { useRouter } from "next/navigation";
 import { formatKite, ACTIVE_NETWORK } from "@/lib/kite-config";
 
 const CATEGORIES = [
@@ -113,6 +114,7 @@ const FEATURED_JOBS = [
 
 export default function AppHome() {
   const [searchTerm, setSearchTerm] = useState("");
+  const router = useRouter();
 
   // ✅ Fix hydration: inisialisasi dengan [] dulu, load data client-side di useEffect
   const [escrows, setEscrows] = useState<any[]>([]);
@@ -168,7 +170,7 @@ export default function AppHome() {
       <section
         onMouseMove={handleMouseMove}
         onMouseDown={handleMouseDown}
-        className="relative overflow-hidden bg-white px-4 py-24 sm:px-6 lg:px-8 min-h-[600px] flex items-center group/hero border-b border-slate-100"
+        className="relative overflow-hidden bg-white px-4 py-14 sm:px-6 lg:px-8 flex items-center group/hero border-b border-slate-100"
       >
         <div className="absolute inset-0 pointer-events-none z-0">
           <div
@@ -227,7 +229,7 @@ export default function AppHome() {
             <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-5xl font-black leading-tight tracking-tight text-slate-900 sm:text-7xl"
+              className="text-4xl font-black leading-tight tracking-tight text-slate-900 sm:text-6xl"
             >
               Find the perfect <span className="text-emerald-600">freelance services</span> or talent for your business
             </motion.h1>
@@ -253,10 +255,13 @@ export default function AppHome() {
                   placeholder="Search for any service..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && router.push(`/jobs${searchTerm.trim() ? `?q=${encodeURIComponent(searchTerm.trim())}` : ""}`)}
                   className="h-14 w-full rounded-xl bg-white border border-slate-200 pl-12 pr-4 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
                 />
               </div>
-              <Button className="h-14 bg-emerald-500 hover:bg-emerald-400 text-white font-black text-lg px-8 rounded-xl shadow-lg transition-all active:scale-95">
+              <Button
+                onClick={() => router.push(`/jobs${searchTerm.trim() ? `?q=${encodeURIComponent(searchTerm.trim())}` : ""}`)}
+                className="h-14 bg-emerald-500 hover:bg-emerald-400 text-white font-black text-lg px-8 rounded-xl shadow-lg transition-all active:scale-95">
                 Search
               </Button>
             </motion.div>
@@ -269,7 +274,9 @@ export default function AppHome() {
             >
               <span>Popular:</span>
               {["Logo Design", "WordPress", "Video Editing", "AI Services"].map(tag => (
-                <button key={tag} className="hover:text-emerald-600 underline decoration-slate-200 underline-offset-4">{tag}</button>
+                <button key={tag}
+                  onClick={() => router.push(`/jobs?q=${encodeURIComponent(tag)}`)}
+                  className="hover:text-emerald-600 underline decoration-slate-200 underline-offset-4">{tag}</button>
               ))}
             </motion.div>
           </div>

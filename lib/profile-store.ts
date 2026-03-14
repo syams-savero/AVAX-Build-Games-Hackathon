@@ -15,6 +15,7 @@ export interface Profile {
     githubUrl: string;
     twitterUrl: string;
     portfolioUrl: string;
+    avatarUrl?: string | null;
 }
 
 function mapProfile(row: any): Profile {
@@ -26,6 +27,7 @@ function mapProfile(row: any): Profile {
         githubUrl: row.github_url ?? "",
         twitterUrl: row.twitter_url ?? "",
         portfolioUrl: row.portfolio_url ?? "",
+        avatarUrl: row.avatar_url ?? null,
     };
 }
 
@@ -53,6 +55,7 @@ export async function upsertProfile(
         github_url: updates.githubUrl ?? "",
         twitter_url: updates.twitterUrl ?? "",
         portfolio_url: updates.portfolioUrl ?? "",
+        avatar_url: updates.avatarUrl ?? null,
         updated_at: new Date().toISOString(),
     }, { onConflict: "address" });
 

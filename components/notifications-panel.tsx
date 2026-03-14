@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useWallet } from "@/lib/wallet-context";
 import {
     fetchNotifications,
@@ -11,6 +11,7 @@ import {
     type NotifType,
 } from "../lib/chat-notif-store";
 import { X, Bell, CheckCheck, Loader2 } from "lucide-react";
+import { getProfile } from "@/lib/profile-store";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ function NotifItem({
                 {NOTIF_ICON[notif.type as NotifType] ?? "🔔"}
             </div>
             <div className="flex-1 min-w-0">
-                <p className="text-sm text-slate-800 leading-snug">{notif.message}</p>
+                <NotifMessage message={notif.message} />
                 <p className="text-[10px] text-slate-400 mt-1 font-medium">{timeAgo(notif.createdAt)}</p>
             </div>
             {!notif.isRead && (
@@ -78,6 +79,54 @@ function NotifItem({
 }
 
 // ─── Notifications Panel ──────────────────────────────────────────────────────
+
+function NotifMessage({ message }: { message: string }) {
+    const [resolved, setResolved] = useState(message);
+
+    useEffect(() => {
+        // Replace "from 0xABCD...1234" pattern with display name
+        const fromMatch = message.match(/from (0x[0-9a-fA-F]+)/i);
+        if (fromMatch) {
+            const fullAddr = fromMatch[1];
+            resolveFullAddr(fullAddr).then(name => {
+                setResolved(message.replace(fullAddr, name));
+            });
+        }
+    }, [message]);
+
+    return <p className="text-sm text-slate-800 leading-snug">{resolved}</p>;
+}
+
+// Cache display names to avoid repeated fetches
+const nameCache = new Map<string, string>();
+async function resolveAddrInText(text: string): Promise<string> {
+    // Find wallet addresses in text (0x + 40 hex chars)
+    const addrRegex = /0x[0-9a-fA-F]{4,}\.\.\.[0-9a-fA-F]{4}/g;
+    const matches = text.match(addrRegex);
+    if (!matches) return text;
+
+    let result = text;
+    for (const addr of matches) {
+        if (nameCache.has(addr)) {
+            result = result.replace(addr, nameCache.get(addr)!);
+            continue;
+        }
+        // addr is shortened like "0x762d...e610" — search by partial
+        // We can't resolve shortened address directly, but we can check the full address
+        // stored in notification context — for now use as-is if no match
+        nameCache.set(addr, addr);
+    }
+    return result;
+}
+
+// Resolve full address to display name
+async function resolveFullAddr(fullAddr: string): Promise<string> {
+    if (nameCache.has(fullAddr)) return nameCache.get(fullAddr)!;
+    const prof = await getProfile(fullAddr);
+    const name = prof?.name || fullAddr.slice(0, 6) + "..." + fullAddr.slice(-4);
+    nameCache.set(fullAddr, name);
+    return name;
+}
 
 export function NotificationsPanel({ onClose }: { onClose: () => void }) {
     const { address, isConnected } = useWallet();
@@ -105,9 +154,13 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
 
     const handleRead = async (id: string) => {
         await markNotificationRead(id);
-        setNotifications((prev: Notification[]) =>
-            prev.map((n: Notification) => (n.id === id ? { ...n, isRead: true } : n))
-        );
+        setNotifications((prev: Notification[]) => {
+            const updated = prev.map((n: Notification) => (n.id === id ? { ...n, isRead: true } : n));
+            if (updated.every((n: Notification) => n.isRead)) {
+                window.dispatchEvent(new Event("notifications-read"));
+            }
+            return updated;
+        });
     };
 
     const handleMarkAll = async () => {
@@ -115,6 +168,7 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
         setMarkingAll(true);
         await markAllNotificationsRead(address);
         setNotifications((prev: Notification[]) => prev.map((n: Notification) => ({ ...n, isRead: true })));
+        window.dispatchEvent(new Event("notifications-read"));
         setMarkingAll(false);
     };
 
@@ -189,18 +243,23 @@ export function NotificationsPanel({ onClose }: { onClose: () => void }) {
 export function useUnreadCount(address: string | null): number {
     const [count, setCount] = useState(0);
 
+    const refresh = useCallback(async () => {
+        if (!address) { setCount(0); return; }
+        const notifs = await fetchNotifications(address);
+        setCount(notifs.filter((n: Notification) => !n.isRead).length);
+    }, [address]);
+
     useEffect(() => {
         if (!address) { setCount(0); return; }
-        // Load once
-        fetchNotifications(address).then((notifs: Notification[]) => {
-            setCount(notifs.filter((n) => !n.isRead).length);
-        });
-        // Subscribe realtime — satu channel saja
+        refresh();
         const unsub = subscribeToNotifications(address, () => {
             setCount((c) => c + 1);
         });
-        return () => { unsub?.(); };
-    }, [address]); // hanya re-run kalau address berubah
+        // Listen for custom event fired when panel marks all as read
+        const handleRead = () => setCount(0);
+        window.addEventListener("notifications-read", handleRead);
+        return () => { unsub?.(); window.removeEventListener("notifications-read", handleRead); };
+    }, [address, refresh]);
 
     return count;
 }

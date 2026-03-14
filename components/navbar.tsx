@@ -1,7 +1,7 @@
 "use client";
 
 import { TrendingUp } from "lucide-react"
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@/lib/wallet-context";
@@ -30,6 +30,96 @@ import {
   UserCircle,
 } from "lucide-react";
 import { NotificationsPanel, useUnreadCount } from "@/components/notifications-panel";
+import { subscribeToAllRooms } from "@/lib/chat-notif-store";
+
+// ─── Shared WalletAvatar ─────────────────────────────────────────────────────
+// avatarUrl: if provided shows photo, else shows initials
+export function WalletAvatar({
+  address,
+  avatarUrl,
+  size = "sm",
+  className = "",
+}: {
+  address: string;
+  avatarUrl?: string | null;
+  size?: "xs" | "sm" | "md" | "lg";
+  className?: string;
+}) {
+  const sizeClass = {
+    xs: "w-6 h-6 text-[9px]",
+    sm: "w-8 h-8 text-xs",
+    md: "w-10 h-10 text-sm",
+    lg: "w-16 h-16 text-xl",
+  }[size];
+
+  const initials = address.slice(2, 4).toUpperCase();
+
+  // Generate consistent color from address
+  const colors = [
+    "bg-emerald-100 text-emerald-700 border-emerald-200",
+    "bg-blue-100 text-blue-700 border-blue-200",
+    "bg-violet-100 text-violet-700 border-violet-200",
+    "bg-amber-100 text-amber-700 border-amber-200",
+    "bg-rose-100 text-rose-700 border-rose-200",
+    "bg-cyan-100 text-cyan-700 border-cyan-200",
+  ];
+  const colorIdx = parseInt(address.slice(2, 4), 16) % colors.length;
+  const colorClass = colors[colorIdx];
+
+  if (avatarUrl) {
+    return (
+      <div className={`${sizeClass} rounded-xl border overflow-hidden shrink-0 ${className}`}>
+        <img src={avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${sizeClass} rounded-xl border flex items-center justify-center shrink-0 font-black ${colorClass} ${className}`}>
+      {initials}
+    </div>
+  );
+}
+
+function ChatNotifBadge() {
+  const { address } = useWallet();
+  const [unread, setUnread] = useState(0);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (!address) return;
+    // Reset when visiting /messages
+    if (pathname.startsWith("/messages")) { setUnread(0); return; }
+
+    // Subscribe to DMs for this address
+    const dmPattern = address.toLowerCase().replace("0x", "");
+    // We subscribe with a broad listener — filter in callback
+    const unsub = subscribeToAllRooms([null], (msg) => {
+      if (msg.sender.toLowerCase() === address.toLowerCase()) return;
+      if (!pathname.startsWith("/messages")) {
+        setUnread(v => v + 1);
+      }
+    });
+    return unsub;
+  }, [address, pathname]);
+
+  return (
+    <div className="relative">
+      <Link href="/messages"
+        className="relative h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-all"
+        title="Messages"
+        onClick={() => setUnread(0)}
+      >
+        <MessageSquare className="h-5 w-5" />
+        {unread > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-emerald-500 text-white text-[9px] font-black flex items-center justify-center px-1 pointer-events-none">
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
+      </Link>
+    </div>
+  );
+}
 
 export function Navbar() {
   const pathname = usePathname();
@@ -124,16 +214,11 @@ export function Navbar() {
             </div>
 
             {/* Chat Button → /messages */}
-            <Link href="/messages"
-              className="relative h-9 w-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-all"
-              title="Messages"
-            >
-              <MessageSquare className="h-5 w-5" />
-            </Link>
+            <ChatNotifBadge />
 
-            <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 overflow-hidden cursor-pointer hover:border-emerald-500 transition-all">
-              {/* Avatar placeholder */}
-            </div>
+            <Link href="/profile/me" title="My Profile">
+              <WalletAvatar address={address ?? "0x0000"} size="sm" className="rounded-full cursor-pointer hover:border-emerald-500 transition-all" />
+            </Link>
           </div>
 
           <div className="h-6 w-px bg-slate-200 hidden md:block"></div>

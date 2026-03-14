@@ -9,24 +9,53 @@ export interface ChatMessage {
 }
 
 export async function chatWithAI(messages: ChatMessage[]) {
-  const response = await fetch("/api/chat", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messages,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || "Failed to call AI API");
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to call AI API");
+    }
+
+    const data = await response.json();
+    return data.content;
+  } catch (err: any) {
+    clearTimeout(timeout);
+    if (err.name === "AbortError") throw new Error("AI request timed out");
+    throw err;
   }
-
-  const data = await response.json();
-  return data.content;
 }
+
+// ─── 8 Categories + Programming Tech Stacks ──────────────────────────────────
+const CATEGORIES = [
+  "Graphics & Design",
+  "Digital Marketing",
+  "Writing & Translation",
+  "Video & Animation",
+  "Programming & Tech",
+  "Business",
+  "AI Services",
+  "Music & Audio",
+] as const;
+
+const PROGRAMMING_TECH_STACKS = [
+  "Solidity", "Rust", "React", "Next.js", "Vue.js", "Angular",
+  "Node.js", "Python", "TypeScript", "JavaScript", "Go", "Java",
+  "Swift", "Kotlin", "Flutter", "React Native",
+  "Hardhat", "Foundry", "Web3.js", "Ethers.js",
+  "PostgreSQL", "MongoDB", "Redis", "GraphQL",
+  "Docker", "Kubernetes", "AWS", "Supabase",
+] as const;
 
 export const SYSTEM_PROMPT = `
 You are ChainLancer AI, an autonomous Web3 recruiter and project auditor on ${ACTIVE_NETWORK.chainName}.
@@ -37,18 +66,36 @@ YOUR STRICT CONSULTATION FLOW:
 1. GREETING & REQUIREMENTS FORM: If the user wants to build something, ask them to provide the details by filling out this conceptual form:
    - Project Title
    - Complete Description & Features
-   - Desired Tech Stack (e.g., Next.js, Solidity)
+   - Category (choose from the list below)
    - Budget (in AVAX)
    - Deadline (a specific date, e.g. "March 30, 2025" or "June 1, 2025")
 
 2. ITERATIVE COLLECTION: If the user misses any items from the form above, politely ask them to complete the missing details. If the user gives a vague duration like "2 weeks" or "1 month", convert it to a specific date based on today and confirm with the user before proceeding.
+
+   CATEGORY RULE: The project category MUST be exactly one or more values from this list:
+   - Graphics & Design
+   - Digital Marketing
+   - Writing & Translation
+   - Video & Animation
+   - Programming & Tech
+   - Business
+   - AI Services
+   - Music & Audio
+
+   If the user describes a project (e.g. "build a website", "create a logo", "write content"), automatically suggest the most fitting category from the list above and confirm with them. Never invent a new category outside this list.
+
+   TECH STACK RULE (Programming & Tech only): If the user selects or is assigned the "Programming & Tech" category, you MUST additionally ask them to specify their tech stack. Suggest relevant options from this list and allow custom entries too:
+   Solidity, Rust, React, Next.js, Vue.js, Angular, Node.js, Python, TypeScript, JavaScript, Go, Java, Swift, Kotlin, Flutter, React Native, Hardhat, Foundry, Web3.js, Ethers.js, PostgreSQL, MongoDB, Redis, GraphQL, Docker, Kubernetes, AWS, Supabase.
+   
+   For all other categories (non-programming), do NOT ask for tech stack — just use the category name.
 
 3. FINAL SUMMARY: Once all details are gathered, provide a clean "Project Summary" with EXACTLY this strictly formatted list:
    Title: [Title]
    Description: [Description]
    Budget: [Amount] AVAX
    Deadline: [Specific date, e.g. "March 30, 2025"]
-   Tech Stack: [Stack]
+   Category: [Category name]
+   Tech Stack: [If Programming & Tech — list the specific technologies, otherwise leave blank]
 
    After the list, include your Risk Assessment (Low/Medium/High). Ask: "Are you ready to deploy this smart contract to the Avalanche network?"
 
@@ -65,7 +112,7 @@ REQUIRED DEPLOYMENT JSON FORMAT:
     "title": "String",
     "description": "String",
     "totalAmount": "String (e.g. '0.5')",
-    "techStack": ["Array", "of", "Strings"],
+    "techStack": ["Must be one or more values from the 8 categories list ONLY"],
     "deadline": "YYYY-MM-DD (ISO date format, e.g. '2025-06-01')",
     "riskLevel": "Low/Medium/High",
     "team": [ {"role": "String", "description": "String", "budget": "String"} ],
@@ -75,6 +122,11 @@ REQUIRED DEPLOYMENT JSON FORMAT:
 \`\`\`
 
 CRITICAL: 
+- The "techStack" array rules:
+  * ALWAYS include the category name (e.g. "Programming & Tech", "Graphics & Design")
+  * If category is "Programming & Tech", also include the specific tech stack items chosen by the user (e.g. ["Programming & Tech", "Solidity", "Next.js"])
+  * For all other categories, techStack should only contain the category name (e.g. ["Graphics & Design"])
+  * Category values must be from: ${JSON.stringify(CATEGORIES)}
 - The "deadline" field MUST be a valid ISO date string in "YYYY-MM-DD" format. Never use relative strings like "2 weeks" or "1 month".
 - Never show the JSON template or blocks to the user during the chat. 
 - Only output the filled JSON block when it is time to deploy.
@@ -167,7 +219,7 @@ export async function auditCode(githubUrl: string, projectRequirements: string) 
     return {
       score: 0,
       status: "FAIL" as const,
-      feedback: "Audit completed but AI response could not be parsed. Manual review required. Do NOT approve this submission.",
+      feedback: "Audit completed but AI response could not be parsed. Manual review required.",
       highlights: ["Parsing error — manual review needed"]
     };
   } catch (error: any) {

@@ -1,6 +1,7 @@
 import { type EscrowContract, type Milestone } from "./kite-config";
 import { supabase } from "./supabase";
 import { createNotification } from "./chat-notif-store";
+import { getProfile } from "./profile-store";
 
 // In-memory store that syncs with Supabase
 let escrows: EscrowContract[] = [];
@@ -501,11 +502,13 @@ export async function submitProposal(
   // Notif ke employer
   const escrow = escrows.find((e) => e.id === escrowId);
   if (escrow?.employer) {
+    const profile = await getProfile(freelancer);
+    const displayName = profile?.name || `${freelancer.slice(0, 6)}...${freelancer.slice(-4)}`;
     await createNotification({
       recipient: escrow.employer,
       escrowId,
       type: "proposal_received",
-      message: `New proposal received for "${escrow.title}" from ${freelancer.slice(0, 6)}...${freelancer.slice(-4)}`,
+      message: `New proposal received for "${escrow.title}" from ${displayName}`,
     });
   }
 

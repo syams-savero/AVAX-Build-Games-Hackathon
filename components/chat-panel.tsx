@@ -63,8 +63,8 @@ function MessageBubble({
             )}
             <div
                 className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm leading-relaxed ${isMe
-                        ? "bg-emerald-600 text-white rounded-br-sm"
-                        : "bg-slate-100 text-slate-800 rounded-bl-sm"
+                    ? "bg-emerald-600 text-white rounded-br-sm"
+                    : "bg-slate-100 text-slate-800 rounded-bl-sm"
                     }`}
             >
                 {msg.content}
@@ -241,7 +241,7 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
             cancelled = true;
             unsub?.();
         };
-    }, [view, activeEscrowId]); // re-run hanya kalau view/escrow ganti
+    }, [view, activeEscrowId]);
 
     const handleSend = async (text: string) => {
         if (!address || !isConnected) return;
@@ -370,7 +370,7 @@ export function ChatPanel({ onClose }: { onClose: () => void }) {
                                         </p>
                                     </div>
                                     <div className={`h-2 w-2 rounded-full flex-shrink-0 ${escrow.status === "completed" ? "bg-slate-300" :
-                                            escrow.status === "funded" ? "bg-emerald-400" : "bg-amber-400"
+                                        escrow.status === "funded" ? "bg-emerald-400" : "bg-amber-400"
                                         }`} />
                                 </button>
                             ))}

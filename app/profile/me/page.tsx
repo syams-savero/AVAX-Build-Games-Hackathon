@@ -5,18 +5,24 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@/lib/wallet-context";
 import { getProfile, upsertProfile, type Profile } from "@/lib/profile-store";
+import { createClient } from "@supabase/supabase-js";
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 import { getEscrows, reloadEscrows } from "@/lib/escrow-store";
 import type { EscrowContract } from "@/lib/kite-config";
 import { ACTIVE_NETWORK } from "@/lib/kite-config";
 import {
     ArrowLeft, Github, Twitter, Globe, ShieldCheck,
-    Briefcase, Users, Loader2, Save, X, ExternalLink, Pencil
+    Briefcase, Users, Loader2, Save, X, ExternalLink, Pencil, Camera
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import Link from "next/link";
+import { WalletAvatar } from "@/components/navbar";
 
 // ─── Trust Score ──────────────────────────────────────────────────────────────
 function calcTrustScore(myGigs: EscrowContract[]) {
@@ -30,14 +36,6 @@ function calcTrustScore(myGigs: EscrowContract[]) {
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
-function WalletAvatar({ address }: { address: string }) {
-    return (
-        <div className="relative shrink-0 w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center">
-            <span className="text-xl font-black text-slate-600">{address.slice(2, 4).toUpperCase()}</span>
-            <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white" />
-        </div>
-    );
-}
 
 // ─── My Profile Page ──────────────────────────────────────────────────────────
 export default function MyProfilePage() {
@@ -48,6 +46,8 @@ export default function MyProfilePage() {
     const [escrows, setEscrows] = useState<EscrowContract[]>([]);
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
     // Form state
     const [name, setName] = useState("");
@@ -72,6 +72,7 @@ export default function MyProfilePage() {
                 setTwitter(prof.twitterUrl);
                 setPortfolio(prof.portfolioUrl);
                 setProfile(prof);
+                setAvatarUrl(prof.avatarUrl ?? null);
             }
             setEscrows(allEscrows);
             setLoading(false);
@@ -100,6 +101,28 @@ export default function MyProfilePage() {
         }
     };
 
+    const handleUploadAvatar = async (file: File) => {
+        if (!address) return;
+        setIsUploadingAvatar(true);
+        try {
+            const ext = file.name.split(".").pop();
+            const path = `${address.toLowerCase()}/avatar.${ext}`;
+            const { error: upErr } = await supabase.storage
+                .from("avatars")
+                .upload(path, file, { upsert: true, contentType: file.type });
+            if (upErr) { toast.error("Upload failed: " + upErr.message); return; }
+            const { data } = supabase.storage.from("avatars").getPublicUrl(path);
+            const url = data.publicUrl + "?t=" + Date.now();
+            setAvatarUrl(url);
+            await upsertProfile(address, { avatarUrl: url });
+            toast.success("Avatar updated!");
+        } catch (e: any) {
+            toast.error(e.message);
+        } finally {
+            setIsUploadingAvatar(false);
+        }
+    };
+
     const handleSave = async () => {
         if (!address) return;
         setIsSaving(true);
@@ -108,6 +131,7 @@ export default function MyProfilePage() {
             githubUrl: github,
             twitterUrl: twitter,
             portfolioUrl: portfolio,
+            avatarUrl,
         });
         if (result.success) {
             toast.success("Profile saved!");
@@ -153,7 +177,16 @@ export default function MyProfilePage() {
             {/* ── Identity Card (read-only preview) ── */}
             <div className="bg-white border border-slate-200 rounded-3xl p-7">
                 <div className="flex items-center gap-5">
-                    <WalletAvatar address={address!} />
+                    <div className="relative group/avatar">
+                        <WalletAvatar address={address!} avatarUrl={avatarUrl} size="lg" />
+                        <label className="absolute inset-0 rounded-2xl bg-black/40 flex items-center justify-center opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer">
+                            {isUploadingAvatar
+                                ? <Loader2 className="h-5 w-5 text-white animate-spin" />
+                                : <Camera className="h-5 w-5 text-white" />}
+                            <input type="file" accept="image/*" className="hidden"
+                                onChange={(e) => e.target.files?.[0] && handleUploadAvatar(e.target.files[0])} />
+                        </label>
+                    </div>
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 flex-wrap">
                             <h1 className="text-lg font-black text-slate-900">{name || address?.slice(0, 6) + "..." + address?.slice(-4)}</h1>
@@ -257,7 +290,7 @@ export default function MyProfilePage() {
                             value={skillInput}
                             onChange={(e) => setSkillInput(e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addSkill())}
-                            placeholder="Solidity, React, Next.js..."
+                            placeholder="Web Dev, Graphic Design, UI/UX, etc"
                             className="rounded-xl border-slate-200 text-sm h-9"
                             disabled={isSaving}
                         />

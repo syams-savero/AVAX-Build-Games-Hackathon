@@ -129,6 +129,7 @@ export function AIChat() {
   const [isDeploying, setIsDeploying] = useState(false);
   const [chatState, setChatState] = useState<ChatState>("INITIAL");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -230,6 +231,7 @@ export function AIChat() {
     setMessages((prev) => [...prev, userMsg]);
     const currentInput = input;
     setInput("");
+    setTimeout(() => inputRef.current?.focus(), 50);
 
     handleMagicDemo(currentInput);
   };
@@ -344,6 +346,10 @@ export function AIChat() {
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Recruiter</span>
             </div>
           </div>
+        </div>
+        <div className="text-right hidden sm:block">
+          <p className="text-sm font-black text-slate-900 uppercase tracking-tight">AI Hiring Assistant</p>
+          <p className="text-[10px] text-slate-400 italic mt-0.5">Powered by ChainLancer Autonomous Recruiter Agent</p>
         </div>
       </div>
 
@@ -524,10 +530,12 @@ export function AIChat() {
       <div className="p-6 border-t border-slate-100 bg-white">
         <form onSubmit={handleSubmit} className="relative">
           <input
+            ref={inputRef}
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Describe your project (budget in AVAX, deadline, goals)..."
+            autoFocus
             disabled={isProcessing}
             className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-6 pr-14 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/10 transition-all"
           />

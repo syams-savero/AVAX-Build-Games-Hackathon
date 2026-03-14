@@ -18,6 +18,7 @@ import {
   getProposalsByFreelancer,
   cancelProposal,
 } from "@/lib/escrow-store";
+import { getProfile } from "@/lib/profile-store";
 import {
   type EscrowContract,
   type EscrowStatus,
@@ -588,6 +589,18 @@ function EditEscrowModal({
   );
 }
 
+// ─── Proposal Name (resolves display name from profile) ──────────────────────
+function ProposalName({ address }: { address: string }) {
+  const [name, setName] = useState(shortenAddress(address));
+  useEffect(() => {
+    getProfile(address).then(prof => {
+      if (prof?.name) setName(prof.name);
+    });
+  }, [address]);
+  return <span>{name}</span>;
+}
+
+
 // ─── EscrowCard ───────────────────────────────────────────────────────────────
 function EscrowCard({
   escrow,
@@ -944,7 +957,7 @@ function EscrowCard({
                         <div className="flex-1 space-y-2">
                           <div className="flex items-center gap-3">
                             <span className="text-[10px] font-black text-slate-900">
-                              {shortenAddress(prop.freelancer)}
+                              <ProposalName address={prop.freelancer} />
                             </span>
                             <Badge className="bg-emerald-600 text-white border-none font-black text-[9px] h-5">
                               AI SCORE: {prop.ai_score}/100
