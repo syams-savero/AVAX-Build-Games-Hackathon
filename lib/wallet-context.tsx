@@ -1,5 +1,6 @@
 "use client";
 
+import { ethers } from "ethers";
 import {
   createContext,
   useContext,
@@ -68,9 +69,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         params: [addr, "latest"],
       })) as string;
 
-      // Use BigInt for better precision
-      const balanceBigInt = BigInt(rawBalance);
-      const balanceInEth = Number(balanceBigInt) / 1e18;
+      // Use ethers.formatEther for precise conversion (no precision loss)
+      const balanceInEth = parseFloat(ethers.formatEther(rawBalance));
 
       // If balance is very small but not zero, show more decimals
       const formattedBalance = balanceInEth === 0 ? "0" :
